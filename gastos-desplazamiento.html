@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gastos de Desplazamiento</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    #map { height: 400px; border-radius: 0.75rem; z-index: 1; }
+    .period-punta   { background:#fee2e2; color:#991b1b; }
+    .period-valle   { background:#dbeafe; color:#1e40af; }
+    .period-nocturna{ background:#ede9fe; color:#5b21b6; }
+    .autocomplete-list { position:absolute; z-index:50; background:white; border:1px solid #e5e7eb; border-radius:0.5rem; max-height:200px; overflow-y:auto; width:100%; box-shadow:0 4px 12px rgba(0,0,0,0.1); }
+    .autocomplete-list div { padding:8px 12px; cursor:pointer; font-size:0.875rem; }
+    .autocomplete-list div:hover, .autocomplete-list div.active { background:#eff6ff; }
+    .tag-section-row { transition: background 0.15s; }
+    .tag-section-row:hover { background: #f9fafb; }
+    details summary { cursor: pointer; list-style: none; }
+    details summary::-webkit-details-marker { display: none; }
+    details[open] .chevron { transform: rotate(90deg); }
+    .chevron { transition: transform 0.15s; }
+    @media print {
+      #form-section, #setup-modal, #apibar, .no-print, #btn-add-tramo, #btn-calc { display:none !important; }
+      #results-section { display:block !important; }
+    }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans text-gray-800">
+
+<!-- ─── SETUP MODAL ─── -->
+<div id="setup-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]">
+  <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+    <h2 class="text-2xl font-bold mb-1">Configuración inicial</h2>
+    <p class="text-sm text-gray-500 mb-4">Necesitas una API Key gratuita de OpenRouteService.</p>
+    <ol class="text-xs text-gray-500 mb-4 list-decimal list-inside space-y-1">
+      <li>Regístrate en <strong>openrouteservice.org</strong></li>
+      <li>Ve a tu Dashboard → Request a token</li>
+      <li>Copia la key y pégala abajo</li>
+    </ol>
+    <label class="block text-sm font-medium mb-1">OpenRouteService API Key</label>
+    <input id="input-apikey" type="text" placeholder="Tu API key..." class="w-full border rounded-lg px-4 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+    <label class="block text-sm font-medium mb-1">Tarifa por km (CLP)</label>
+    <input id="input-kmrate" type="number" value="150" min="1" class="w-full border rounded-lg px-4 py-2 text-sm mb-6 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+    <button onclick="saveSetup()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition">Guardar y continuar</button>
+  </div>
+</div>
+
+<!-- ─── TARIFAS MODAL ─── -->
+<div id="tarifas-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] hidden">
+  <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-2xl mx-4 max-h-[85vh] overflow-y-auto">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-xl font-bold">Editar Tarifas de Autopistas</h2>
+      <button onclick="closeTarifas()" class="text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>
+    </div>
+    <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+      Las tarifas son referenciales. Verifica los valores vigentes en el sitio de cada concesionaria. Los cambios se guardan localmente en tu navegador.
+    </p>
+    <div id="tarifas-editor"></div>
+    <div class="flex gap-3 mt-4">
+      <button onclick="saveTarifas()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition">Guardar tarifas</button>
+      <button onclick="resetTarifas()" class="text-sm text-red-500 hover:text-red-700 px-4">Restaurar originales</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── HEADER ─── -->
+<header class="bg-white border-b sticky top-0 z-40">
+  <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <span class="text-2xl">🚗</span>
+      <div>
+        <h1 class="text-lg font-bold leading-none">Gastos de Desplazamiento</h1>
+        <p class="text-xs text-gray-400">Chile · Hasta 5 tramos · Km + Tags</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2 no-print">
+      <button onclick="openTarifas()" class="text-xs text-orange-600 hover:underline border border-orange-200 rounded-lg px-3 py-1">Tarifas</button>
+      <button onclick="openSetup()" id="apibar" class="text-xs text-blue-600 hover:underline border border-blue-200 rounded-lg px-3 py-1">Configurar</button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-5xl mx-auto px-4 py-6 space-y-6">
+
+  <!-- ─── FORM ─── -->
+  <section id="form-section" class="space-y-4">
+    <div class="bg-white rounded-2xl shadow-sm border p-5 flex flex-wrap items-end gap-4">
+      <div class="flex-1 min-w-[180px]">
+        <label class="block text-sm font-medium mb-1">Tipo de vehículo</label>
+        <select id="vehicle" class="w-full border rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="car">Auto / Camioneta</option>
+          <option value="motorcycle">Motocicleta (50% tag)</option>
+          <option value="truck">Camión / Furgón (150% tag)</option>
+        </select>
+      </div>
+      <div class="min-w-[140px]">
+        <label class="block text-sm font-medium mb-1">Tarifa km (CLP)</label>
+        <input id="km-rate-display" type="number" min="1" class="w-full border rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <div class="flex items-center gap-2 text-sm text-gray-500">
+        <span id="tramo-count">1</span>/5 tramos
+      </div>
+    </div>
+
+    <div id="tramos-container" class="space-y-3"></div>
+
+    <button onclick="addTramo()" id="btn-add-tramo" class="w-full border-2 border-dashed border-gray-300 rounded-xl py-3 text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 transition flex items-center justify-center gap-2">
+      <span class="text-lg">+</span> Agregar tramo
+    </button>
+
+    <button onclick="calcularTodo()" id="btn-calc" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition flex items-center justify-center gap-2">
+      <span id="btn-text">Calcular todos los tramos</span>
+      <svg id="spinner" class="hidden animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+      </svg>
+    </button>
+    <p id="error-msg" class="hidden text-sm text-red-600 text-center"></p>
+  </section>
+
+  <!-- ─── MAPA ─── -->
+  <section id="map-section" class="hidden">
+    <div id="map" class="border shadow-sm"></div>
+  </section>
+
+  <!-- ─── RESULTADOS ─── -->
+  <section id="results-section" class="hidden space-y-4">
+    <div id="results-tramos" class="space-y-3"></div>
+    <div id="grand-total-section" class="bg-white rounded-2xl shadow-sm border p-6 space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="font-semibold text-lg">Resumen Total</h2>
+        <button onclick="window.print()" class="text-xs text-gray-500 hover:text-gray-800 border rounded-lg px-3 py-1 no-print">Imprimir</button>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="bg-blue-50 rounded-xl p-4 border border-blue-100">
+          <p class="text-xs text-blue-600 mb-1">Distancia total</p>
+          <p id="gt-distance" class="text-xl font-bold text-blue-800"></p>
+        </div>
+        <div class="bg-blue-50 rounded-xl p-4 border border-blue-100">
+          <p class="text-xs text-blue-600 mb-1">Duración total</p>
+          <p id="gt-duration" class="text-xl font-bold text-blue-800"></p>
+        </div>
+        <div class="bg-blue-50 rounded-xl p-4 border border-blue-100">
+          <p class="text-xs text-blue-600 mb-1">Costo km total</p>
+          <p id="gt-kmcost" class="text-xl font-bold text-blue-800"></p>
+        </div>
+        <div class="bg-blue-50 rounded-xl p-4 border border-blue-100">
+          <p class="text-xs text-blue-600 mb-1">Tags total</p>
+          <p id="gt-toll" class="text-xl font-bold text-blue-800"></p>
+        </div>
+      </div>
+      <div class="bg-blue-600 text-white rounded-xl p-5 flex items-center justify-between">
+        <span class="text-lg font-semibold">TOTAL GENERAL</span>
+        <span id="gt-total" class="text-2xl font-bold"></span>
+      </div>
+      <p id="gt-info" class="text-xs text-gray-400"></p>
+    </div>
+  </section>
+</main>
+
+<script>
+// ─── CONSTANTS ──────────────────────────────────────────────────────────────
+const ROUTE_COLORS = ['#2563eb','#dc2626','#16a34a','#9333ea','#ea580c'];
+const ROUTE_LABELS = ['A','B','C','D','E'];
+const MAX_TRAMOS = 5;
+const PERIOD_LABEL = { punta:'Hora Punta', valle:'Hora Valle', nocturna:'Nocturna' };
+const PERIOD_CLASS = { punta:'period-punta', valle:'period-valle', nocturna:'period-nocturna' };
+const fmt = n => '$' + Math.round(n).toLocaleString('es-CL');
+
+// ─── TARIFF DATABASE 2026 (updated Jan 2026 — IPC +3.4%) ────────────────────
+// Sources: Chilevisión, El Mostrador, BioBioChile, AVO.cl, concesiones.mop.gob.cl
+// Each section has `gates`: lat/lng points. Route within GATE_RADIUS = detected.
+// Urbanas: punta/valle/nocturna. Interurbanas: punta=valle (sin diferenciación horaria).
+const GATE_RADIUS = 600;
+
+// Valores = costo de UN pórtico representativo por sección (no la suma de todos).
+const DEFAULT_AUTOPISTAS = [
+  {
+    id: 'autopista-central', name: 'Autopista Central (Ruta 5)', type: 'urbana',
+    sections: [
+      { id:'ac-norte', name:'Tramo Norte (Río Mapocho–Ruta 5 Norte)', punta:1024, valle:512, nocturna:256,
+        gates:[[-33.3630,-70.6545],[-33.3750,-70.6540],[-33.3900,-70.6535]] },
+      { id:'ac-centro', name:'Tramo Centro (Alameda–Río Mapocho)', punta:843, valle:421, nocturna:211,
+        gates:[[-33.4100,-70.6530],[-33.4250,-70.6530],[-33.4400,-70.6530]] },
+      { id:'ac-sur', name:'Tramo Sur (Ruta 5 Sur–Alameda)', punta:825, valle:462, nocturna:231,
+        gates:[[-33.4600,-70.6540],[-33.4750,-70.6560],[-33.4900,-70.6600]] },
+    ]
+  },
+  {
+    id: 'costanera-norte', name: 'Costanera Norte', type: 'urbana',
+    sections: [
+      { id:'cn-oriente', name:'Tramo Oriente (Kennedy–Lo Saldes)', punta:819, valle:425, nocturna:213,
+        gates:[[-33.4100,-70.5900],[-33.4130,-70.6050],[-33.4180,-70.6200]] },
+      { id:'cn-poniente', name:'Tramo Poniente (Vivaceta–Américo Vespucio)', punta:1030, valle:535, nocturna:268,
+        gates:[[-33.4200,-70.6800],[-33.4230,-70.7000],[-33.4250,-70.7150]] },
+      { id:'cn-nororiente', name:'Variante Nororiente (Lo Saldes–El Salto)', punta:450, valle:233, nocturna:117,
+        gates:[[-33.4050,-70.6050],[-33.3980,-70.6100]] },
+    ]
+  },
+  {
+    id: 'vespucio-norte', name: 'Vespucio Norte Express', type: 'urbana',
+    sections: [
+      { id:'vn-oriente', name:'Sector Oriente (El Salto–Independencia)', punta:620, valle:455, nocturna:228,
+        gates:[[-33.3780,-70.6100],[-33.3800,-70.6250]] },
+      { id:'vn-centro', name:'Sector Central (Independencia–Ruta 5)', punta:517, valle:378, nocturna:189,
+        gates:[[-33.3770,-70.6450],[-33.3780,-70.6550]] },
+      { id:'vn-poniente', name:'Sector Poniente (Ruta 5–Quilicura)', punta:414, valle:300, nocturna:150,
+        gates:[[-33.3750,-70.6800],[-33.3700,-70.7000]] },
+    ]
+  },
+  {
+    id: 'vespucio-sur', name: 'Vespucio Sur', type: 'urbana',
+    sections: [
+      { id:'vs-oriente', name:'Sector Oriente (La Florida–Puente Alto)', punta:600, valle:300, nocturna:150,
+        gates:[[-33.5100,-70.5950],[-33.5200,-70.6050]] },
+      { id:'vs-centro', name:'Sector Central (Puente Alto–El Bosque)', punta:500, valle:250, nocturna:125,
+        gates:[[-33.5250,-70.6300],[-33.5200,-70.6500]] },
+      { id:'vs-poniente', name:'Sector Poniente (El Bosque–Maipú)', punta:600, valle:300, nocturna:150,
+        gates:[[-33.5050,-70.6750],[-33.4950,-70.6900]] },
+    ]
+  },
+  {
+    id: 'americo-vespucio-oriente', name: 'Américo Vespucio Oriente (AVO)', type: 'urbana',
+    sections: [
+      { id:'avo-norte', name:'Tramo Norte (El Salto–Príncipe de Gales)', punta:534, valle:267, nocturna:134,
+        gates:[[-33.3950,-70.5880],[-33.4100,-70.5850]] },
+      { id:'avo-sur', name:'Tramo Sur (Príncipe de Gales–Grecia)', punta:464, valle:232, nocturna:116,
+        gates:[[-33.4300,-70.5830],[-33.4450,-70.5850]] },
+    ]
+  },
+  {
+    id: 'tunel-san-cristobal', name: 'Túnel San Cristóbal', type: 'urbana',
+    sections: [
+      { id:'tsc-paso', name:'Paso por túnel', punta:1500, valle:1000, nocturna:500,
+        gates:[[-33.4170,-70.6340],[-33.4130,-70.6330]] },
+    ]
+  },
+  {
+    id: 'ruta-68', name: 'Ruta 68 (Santiago–Valparaíso)', type: 'interurbana',
+    sections: [
+      { id:'r68-full', name:'Peaje Ruta 68', punta:4000, valle:2700, nocturna:2700,
+        gates:[[-33.3700,-71.0600],[-33.0500,-71.4400]] },
+    ]
+  },
+  {
+    id: 'ruta-78', name: 'Ruta 78 – Autopista del Sol', type: 'interurbana',
+    sections: [
+      { id:'r78-av', name:'Plaza Américo Vespucio', punta:1077, valle:718, nocturna:718,
+        gates:[[-33.4900,-70.7200]] },
+      { id:'r78-malloco', name:'Plaza Malloco', punta:338, valle:225, nocturna:225,
+        gates:[[-33.5300,-70.8500]] },
+      { id:'r78-talagante', name:'Plaza Talagante', punta:562, valle:375, nocturna:375,
+        gates:[[-33.6600,-71.1800]] },
+    ]
+  },
+  {
+    id: 'ruta-5-sur', name: 'Ruta 5 Sur', type: 'interurbana',
+    sections: [
+      { id:'r5s-accesosur', name:'Acceso Sur (troncal)', punta:1400, valle:1400, nocturna:1400,
+        gates:[[-33.5800,-70.6500]] },
+      { id:'r5s-angostura', name:'Plaza Angostura', punta:3800, valle:3800, nocturna:3800,
+        gates:[[-33.8500,-70.7200]] },
+    ]
+  },
+  {
+    id: 'ruta-5-norte', name: 'Ruta 5 Norte', type: 'interurbana',
+    sections: [
+      { id:'r5n-lampa', name:'Plaza Lampa', punta:2895, valle:2895, nocturna:2895,
+        gates:[[-33.2700,-70.8700]] },
+    ]
+  },
+  {
+    id: 'ruta-57', name: 'Ruta 57 – Los Libertadores', type: 'interurbana',
+    sections: [
+      { id:'r57-colina', name:'Plaza Colina', punta:2275, valle:2275, nocturna:2275,
+        gates:[[-33.1800,-70.6700]] },
+    ]
+  },
+  {
+    id: 'autopista-nororiente', name: 'Autopista Nororiente', type: 'interurbana',
+    sections: [
+      { id:'nor-oriente', name:'Sector Oriente', punta:6173, valle:4116, nocturna:4116,
+        gates:[[-33.3500,-70.5200]] },
+      { id:'nor-poniente', name:'Sector Poniente', punta:4116, valle:2744, nocturna:2744,
+        gates:[[-33.3200,-70.5800]] },
+    ]
+  },
+];
+
+// ─── HAVERSINE DISTANCE ─────────────────────────────────────────────────────
+function haversineMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ─── AUTO-DETECT TOLLS FROM ROUTE GEOMETRY ──────────────────────────────────
+const TARIFF_VERSION = '2026-01';
+function loadAutopistas() {
+  const ver = localStorage.getItem('autopistas_version');
+  if (ver === TARIFF_VERSION) {
+    const saved = localStorage.getItem('autopistas_tarifas');
+    if (saved) { try { return JSON.parse(saved); } catch(e) {} }
+  } else {
+    localStorage.removeItem('autopistas_tarifas');
+    localStorage.setItem('autopistas_version', TARIFF_VERSION);
+  }
+  return JSON.parse(JSON.stringify(DEFAULT_AUTOPISTAS));
+}
+
+let AUTOPISTAS = loadAutopistas();
+let API_KEY = localStorage.getItem('ors_api_key') || 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjU5MDA2YjZkZWIzZjQ1YTdhNmE2YWVkZTYzM2MxZTkxIiwiaCI6Im11cm11cjY0In0=';
+let KM_RATE = parseFloat(localStorage.getItem('km_rate')) || 150;
+let map = null;
+let routeLayers = [];
+let markerLayers = [];
+let tramos = [];
+let results = [];
+let geocodeTimers = {};
+
+// ─── SETUP ──────────────────────────────────────────────────────────────────
+function openSetup() {
+  document.getElementById('input-apikey').value = API_KEY;
+  document.getElementById('input-kmrate').value = KM_RATE;
+  document.getElementById('setup-modal').classList.remove('hidden');
+}
+
+function saveSetup() {
+  const key = document.getElementById('input-apikey').value.trim();
+  const rate = parseFloat(document.getElementById('input-kmrate').value) || 150;
+  if (!key) { alert('Ingresa una API Key válida.'); return; }
+  API_KEY = key; KM_RATE = rate;
+  localStorage.setItem('ors_api_key', key);
+  localStorage.setItem('km_rate', rate);
+  document.getElementById('km-rate-display').value = rate;
+  document.getElementById('setup-modal').classList.add('hidden');
+  initMap();
+}
+
+// ─── TARIFAS EDITOR ─────────────────────────────────────────────────────────
+function openTarifas() {
+  const editor = document.getElementById('tarifas-editor');
+  let html = '';
+  AUTOPISTAS.forEach((ap, ai) => {
+    const isUrban = ap.type === 'urbana';
+    html += `<div class="mb-4 border rounded-xl overflow-hidden">
+      <div class="bg-gray-100 px-4 py-2 font-semibold text-sm flex items-center gap-2">
+        <span class="text-xs px-2 py-0.5 rounded ${isUrban ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}">${isUrban ? 'Urbana' : 'Interurbana'}</span>
+        ${ap.name}
+      </div>
+      <table class="w-full text-xs">
+        <thead><tr class="text-gray-500 border-b">
+          <th class="text-left px-4 py-1.5 font-medium">Sección</th>
+          ${isUrban ? '<th class="px-2 py-1.5 font-medium w-20">Punta</th><th class="px-2 py-1.5 font-medium w-20">Valle</th><th class="px-2 py-1.5 font-medium w-20">Nocturna</th>' : '<th class="px-2 py-1.5 font-medium w-24">Tarifa fija</th>'}
+        </tr></thead><tbody>`;
+    ap.sections.forEach((s, si) => {
+      if (isUrban) {
+        html += `<tr class="border-b last:border-0">
+          <td class="px-4 py-2">${s.name}</td>
+          <td class="px-2 py-2"><input type="number" class="tarifa-input w-full border rounded px-2 py-1 text-center" data-ap="${ai}" data-sec="${si}" data-field="punta" value="${s.punta}" min="0" /></td>
+          <td class="px-2 py-2"><input type="number" class="tarifa-input w-full border rounded px-2 py-1 text-center" data-ap="${ai}" data-sec="${si}" data-field="valle" value="${s.valle}" min="0" /></td>
+          <td class="px-2 py-2"><input type="number" class="tarifa-input w-full border rounded px-2 py-1 text-center" data-ap="${ai}" data-sec="${si}" data-field="nocturna" value="${s.nocturna}" min="0" /></td>
+        </tr>`;
+      } else {
+        html += `<tr class="border-b last:border-0">
+          <td class="px-4 py-2">${s.name}</td>
+          <td class="px-2 py-2"><input type="number" class="tarifa-input w-full border rounded px-2 py-1 text-center" data-ap="${ai}" data-sec="${si}" data-field="flat" value="${s.flat}" min="0" /></td>
+        </tr>`;
+      }
+    });
+    html += '</tbody></table></div>';
+  });
+  editor.innerHTML = html;
+  document.getElementById('tarifas-modal').classList.remove('hidden');
+}
+
+function closeTarifas() {
+  document.getElementById('tarifas-modal').classList.add('hidden');
+}
+
+function saveTarifas() {
+  document.querySelectorAll('.tarifa-input').forEach(inp => {
+    const ai = parseInt(inp.dataset.ap);
+    const si = parseInt(inp.dataset.sec);
+    const field = inp.dataset.field;
+    AUTOPISTAS[ai].sections[si][field] = parseInt(inp.value) || 0;
+  });
+  localStorage.setItem('autopistas_tarifas', JSON.stringify(AUTOPISTAS));
+  closeTarifas();
+  // tarifas updated, will apply on next calculation
+}
+
+function resetTarifas() {
+  if (!confirm('¿Restaurar todas las tarifas a los valores originales?')) return;
+  AUTOPISTAS = JSON.parse(JSON.stringify(DEFAULT_AUTOPISTAS));
+  localStorage.removeItem('autopistas_tarifas');
+  closeTarifas();
+  // tarifas updated, will apply on next calculation
+}
+
+// ─── MAP ────────────────────────────────────────────────────────────────────
+function initMap() {
+  if (map) return;
+  map = L.map('map').setView([-33.45, -70.66], 11);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap'
+  }).addTo(map);
+}
+
+// ─── GEOCODE AUTOCOMPLETE (Nominatim / OpenStreetMap) ────────────────────────
+function setupAutocomplete(input) {
+  const wrapper = input.parentElement;
+  wrapper.style.position = 'relative';
+  let listEl = wrapper.querySelector('.autocomplete-list');
+  if (!listEl) {
+    listEl = document.createElement('div');
+    listEl.className = 'autocomplete-list hidden';
+    wrapper.appendChild(listEl);
+  }
+  let activeIdx = -1;
+
+  input.addEventListener('input', () => {
+    const q = input.value.trim();
+    input.dataset.lat = ''; input.dataset.lng = '';
+    clearTimeout(geocodeTimers[input.id]);
+    if (q.length < 3) { listEl.classList.add('hidden'); return; }
+    geocodeTimers[input.id] = setTimeout(() => geocodeSearch(q, listEl, input), 400);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    const items = listEl.querySelectorAll('div');
+    if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = Math.min(activeIdx+1, items.length-1); highlightItem(items, activeIdx); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); activeIdx = Math.max(activeIdx-1, 0); highlightItem(items, activeIdx); }
+    else if (e.key === 'Enter' && activeIdx >= 0 && items[activeIdx]) { e.preventDefault(); selectItem(input, items[activeIdx], listEl); activeIdx = -1; }
+    else if (e.key === 'Escape') { listEl.classList.add('hidden'); activeIdx = -1; }
+  });
+
+  document.addEventListener('click', (e) => { if (!wrapper.contains(e.target)) { listEl.classList.add('hidden'); activeIdx = -1; } });
+}
+
+function highlightItem(items, idx) { items.forEach((el, i) => el.classList.toggle('active', i === idx)); }
+
+function selectItem(input, item, listEl) {
+  input.value = item.dataset.label;
+  input.dataset.lat = item.dataset.lat;
+  input.dataset.lng = item.dataset.lng;
+  listEl.classList.add('hidden');
+}
+
+async function geocodeSearch(query, listEl, input) {
+  try {
+    // Try Photon first (better address-level data)
+    const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=6&lang=es&lat=-33.45&lon=-70.66&zoom=18&location_bias_scale=0.5`;
+    let resp = await fetch(photonUrl);
+    let results = [];
+
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.features?.length) {
+        results = data.features
+          .filter(f => {
+            const cc = f.properties.countrycode;
+            return !cc || cc.toUpperCase() === 'CL';
+          })
+          .map(f => {
+            const p = f.properties;
+            const parts = [];
+            if (p.name && p.name !== p.street) parts.push(p.name);
+            if (p.street) parts.push(p.street);
+            if (p.housenumber) parts[parts.length - 1] += ' ' + p.housenumber;
+            if (p.locality || p.city) parts.push(p.locality || p.city);
+            if (p.region) parts.push(p.region);
+            const label = parts.join(', ') || p.name || query;
+            return {
+              label,
+              lat: f.geometry.coordinates[1],
+              lng: f.geometry.coordinates[0]
+            };
+          });
+      }
+    }
+
+    // Fallback to Nominatim if Photon returned nothing
+    if (results.length === 0) {
+      const nomUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query + ', Chile')}&format=json&addressdetails=1&limit=6&countrycodes=cl&accept-language=es`;
+      resp = await fetch(nomUrl, { headers: { 'User-Agent': 'GastosDesplazamientoApp/1.0' } });
+      if (resp.ok) {
+        const data = await resp.json();
+        results = data.map(place => ({
+          label: place.display_name,
+          lat: parseFloat(place.lat),
+          lng: parseFloat(place.lon)
+        }));
+      }
+    }
+
+    listEl.innerHTML = '';
+    if (!results.length) { listEl.classList.add('hidden'); return; }
+    results.forEach(r => {
+      const div = document.createElement('div');
+      div.textContent = r.label;
+      div.dataset.label = r.label;
+      div.dataset.lat = r.lat;
+      div.dataset.lng = r.lng;
+      div.addEventListener('click', () => selectItem(input, div, listEl));
+      listEl.appendChild(div);
+    });
+    listEl.classList.remove('hidden');
+  } catch(e) {}
+}
+
+// ─── TOLL PERIOD ────────────────────────────────────────────────────────────
+function getTollPeriod(dt) {
+  const day = dt.getDay();
+  const t = dt.getHours() + dt.getMinutes() / 60;
+  if (t >= 22 || t < 6) return 'nocturna';
+  if (day >= 1 && day <= 5 && ((t >= 7 && t < 9) || (t >= 17.5 && t < 20))) return 'punta';
+  return 'valle';
+}
+
+function vehicleMultiplier() {
+  const v = document.getElementById('vehicle').value;
+  return v === 'motorcycle' ? 0.5 : v === 'truck' ? 1.5 : 1.0;
+}
+
+function getSectionPrice(section, period) {
+  return section[period] || section.valle || 0;
+}
+
+// ─── AUTO TOLL CALCULATION ──────────────────────────────────────────────────
+function calcTollsFromRoute(routeCoords, period) {
+  const vMult = vehicleMultiplier();
+  const detected = [];
+
+  // Sample route points for performance
+  const sampled = [];
+  const step = Math.max(1, Math.floor(routeCoords.length / 300));
+  for (let i = 0; i < routeCoords.length; i += step) sampled.push(routeCoords[i]);
+  if (sampled[sampled.length - 1] !== routeCoords[routeCoords.length - 1])
+    sampled.push(routeCoords[routeCoords.length - 1]);
+
+  AUTOPISTAS.forEach(ap => {
+    ap.sections.forEach(sec => {
+      const gates = sec.gates || [];
+      let found = false;
+      for (const gate of gates) {
+        for (const pt of sampled) {
+          if (haversineMeters(gate[0], gate[1], pt[1], pt[0]) < GATE_RADIUS) { found = true; break; }
+        }
+        if (found) break;
+      }
+      if (found) {
+        const price = getSectionPrice(sec, period);
+        detected.push({
+          highway: ap.name,
+          section: sec.name,
+          price: Math.round(price * vMult)
+        });
+      }
+    });
+  });
+
+  return detected;
+}
+
+// ─── TRAMO MANAGEMENT ───────────────────────────────────────────────────────
+function defaultDatetime() {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  return now.toISOString().slice(0, 16);
+}
+
+function addTramo() {
+  if (tramos.length >= MAX_TRAMOS) return;
+  const idx = tramos.length;
+  const id = 'tramo-' + idx;
+  tramos.push(id);
+  const prevDest = idx > 0 ? document.querySelector(`#tramo-${idx-1} .tramo-dest`)?.value || '' : '';
+
+  const html = `
+    <div id="${id}" class="tramo-card bg-white rounded-2xl shadow-sm border p-5 relative">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="tramo-badge inline-flex items-center justify-center w-7 h-7 rounded-full text-white text-xs font-bold" style="background:${ROUTE_COLORS[idx]}">${ROUTE_LABELS[idx]}</span>
+        <h3 class="tramo-title font-semibold text-sm">Tramo ${idx + 1}</h3>
+        ${idx > 0 ? `<button class="tramo-remove ml-auto text-gray-400 hover:text-red-500 text-lg leading-none no-print" onclick="removeTramo(${idx})" title="Eliminar">&times;</button>` : ''}
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Origen</label>
+          <input type="text" id="origin-${idx}" class="tramo-origin w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Buscar dirección..." value="${escapeHtml(prevDest)}" data-lat="" data-lng="" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Destino</label>
+          <input type="text" id="dest-${idx}" class="tramo-dest w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Buscar dirección..." data-lat="" data-lng="" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Fecha y hora</label>
+          <input type="datetime-local" class="tramo-datetime w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value="${defaultDatetime()}" />
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('tramos-container').insertAdjacentHTML('beforeend', html);
+  updateTramoUI();
+
+  setupAutocomplete(document.getElementById('origin-' + idx));
+  setupAutocomplete(document.getElementById('dest-' + idx));
+
+  if (prevDest && idx > 0) {
+    const prevDestInput = document.querySelector(`#tramo-${idx-1} .tramo-dest`);
+    if (prevDestInput?.dataset.lat) {
+      const originInput = document.getElementById('origin-' + idx);
+      originInput.dataset.lat = prevDestInput.dataset.lat;
+      originInput.dataset.lng = prevDestInput.dataset.lng;
+    }
+  }
+}
+
+function removeTramo(idx) {
+  document.getElementById('tramo-' + idx)?.remove();
+  tramos.splice(idx, 1);
+  renumberTramos();
+  updateTramoUI();
+}
+
+function renumberTramos() {
+  const cards = document.querySelectorAll('#tramos-container .tramo-card');
+  tramos = [];
+  cards.forEach((card, i) => {
+    card.id = 'tramo-' + i;
+    tramos.push('tramo-' + i);
+    card.querySelector('.tramo-badge').style.background = ROUTE_COLORS[i];
+    card.querySelector('.tramo-badge').textContent = ROUTE_LABELS[i];
+    card.querySelector('.tramo-title').textContent = `Tramo ${i + 1}`;
+
+    const rmBtn = card.querySelector('.tramo-remove');
+    if (rmBtn) rmBtn.setAttribute('onclick', `removeTramo(${i})`);
+    if (i === 0 && rmBtn) rmBtn.remove();
+
+    card.querySelector('.tramo-origin').id = 'origin-' + i;
+    card.querySelector('.tramo-dest').id = 'dest-' + i;
+  });
+}
+
+function updateTramoUI() {
+  document.getElementById('tramo-count').textContent = tramos.length;
+  document.getElementById('btn-add-tramo').classList.toggle('hidden', tramos.length >= MAX_TRAMOS);
+}
+
+// ─── GEOCODE RESOLVE (Photon + Nominatim fallback) ──────────────────────────
+async function resolveCoords(input) {
+  if (input.dataset.lat && input.dataset.lng) {
+    return [parseFloat(input.dataset.lng), parseFloat(input.dataset.lat)];
+  }
+  const q = input.value.trim();
+  if (!q) return null;
+
+  // Try Photon
+  try {
+    const resp = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=1&lat=-33.45&lon=-70.66`);
+    if (resp.ok) {
+      const data = await resp.json();
+      const feat = data.features?.[0];
+      if (feat) {
+        input.dataset.lat = feat.geometry.coordinates[1];
+        input.dataset.lng = feat.geometry.coordinates[0];
+        return feat.geometry.coordinates;
+      }
+    }
+  } catch(e) {}
+
+  // Fallback Nominatim
+  try {
+    const resp = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q + ', Chile')}&format=json&limit=1&countrycodes=cl`, { headers: { 'User-Agent': 'GastosDesplazamientoApp/1.0' } });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.length) {
+        input.dataset.lat = data[0].lat;
+        input.dataset.lng = data[0].lon;
+        return [parseFloat(data[0].lon), parseFloat(data[0].lat)];
+      }
+    }
+  } catch(e) {}
+
+  return null;
+}
+
+// ─── ORS DIRECTIONS ─────────────────────────────────────────────────────────
+async function fetchRoute(originCoords, destCoords) {
+  const resp = await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': API_KEY },
+    body: JSON.stringify({ coordinates: [originCoords, destCoords], instructions: false })
+  });
+  if (!resp.ok) throw new Error('Error ORS: ' + (await resp.text()));
+  return await resp.json();
+}
+
+// ─── CALCULATE ──────────────────────────────────────────────────────────────
+async function calcTramo(idx) {
+  const card = document.getElementById('tramo-' + idx);
+  const originInput = card.querySelector('.tramo-origin');
+  const destInput = card.querySelector('.tramo-dest');
+  const dt = card.querySelector('.tramo-datetime').value;
+
+  if (!originInput.value.trim() || !destInput.value.trim()) throw `Tramo ${idx+1}: falta origen o destino.`;
+  if (!dt) throw `Tramo ${idx+1}: falta fecha/hora.`;
+
+  const originCoords = await resolveCoords(originInput);
+  const destCoords = await resolveCoords(destInput);
+  if (!originCoords) throw `Tramo ${idx+1}: no se encontró dirección de origen.`;
+  if (!destCoords) throw `Tramo ${idx+1}: no se encontró dirección de destino.`;
+
+  const routeData = await fetchRoute(originCoords, destCoords);
+  const feat = routeData.features[0];
+  const distKm = feat.properties.summary.distance / 1000;
+  const durSec = feat.properties.summary.duration;
+  const durText = formatDuration(durSec);
+
+  const departure = new Date(dt);
+  const period = getTollPeriod(departure);
+  const kmCost = Math.round(distKm * KM_RATE);
+
+  // Auto-detect tolls from route geometry
+  const routeCoords = feat.geometry.coordinates;
+  const tagDetails = calcTollsFromRoute(routeCoords, period);
+  const toll = tagDetails.reduce((sum, t) => sum + t.price, 0);
+
+  if (routeLayers[idx]) map.removeLayer(routeLayers[idx]);
+  if (markerLayers[idx]) markerLayers[idx].forEach(m => map.removeLayer(m));
+
+  routeLayers[idx] = L.geoJSON(feat, {
+    style: { color: ROUTE_COLORS[idx], weight: 5, opacity: 0.8 }
+  }).addTo(map);
+
+  const sm = L.circleMarker([originCoords[1], originCoords[0]], {
+    radius: 8, fillColor: ROUTE_COLORS[idx], color: '#fff', weight: 2, fillOpacity: 1
+  }).addTo(map).bindTooltip(`${ROUTE_LABELS[idx]}: Origen`);
+
+  const em = L.circleMarker([destCoords[1], destCoords[0]], {
+    radius: 8, fillColor: ROUTE_COLORS[idx], color: '#fff', weight: 2, fillOpacity: 1
+  }).addTo(map).bindTooltip(`${ROUTE_LABELS[idx]}: Destino`);
+
+  markerLayers[idx] = [sm, em];
+
+  return { idx, origin: originInput.value.trim(), dest: destInput.value.trim(), distKm, durSec, durText, kmCost, toll, period, tagDetails };
+}
+
+async function calcularTodo() {
+  if (!API_KEY) { openSetup(); return; }
+  KM_RATE = parseFloat(document.getElementById('km-rate-display').value) || 150;
+  localStorage.setItem('km_rate', KM_RATE);
+  setLoading(true); clearError();
+
+  routeLayers.forEach(l => l && map.removeLayer(l));
+  markerLayers.forEach(a => a && a.forEach(m => map.removeLayer(m)));
+  routeLayers = []; markerLayers = [];
+  results = [];
+  const errors = [];
+
+  if (!map) initMap();
+  document.getElementById('map-section').classList.remove('hidden');
+  setTimeout(() => map.invalidateSize(), 100);
+
+  for (let i = 0; i < tramos.length; i++) {
+    try { results.push(await calcTramo(i)); }
+    catch (e) { errors.push(typeof e === 'string' ? e : e.message || 'Error en tramo '+(i+1)); }
+  }
+
+  if (errors.length > 0 && results.length === 0) { showError(errors.join(' · ')); setLoading(false); return; }
+  if (errors.length > 0) showError(errors.join(' · '));
+
+  const allBounds = [];
+  routeLayers.forEach(l => { if (l) allBounds.push(l.getBounds()); });
+  if (allBounds.length > 0) {
+    let bounds = allBounds[0];
+    allBounds.slice(1).forEach(b => bounds.extend(b));
+    map.fitBounds(bounds, { padding: [30, 30] });
+  }
+
+  renderAllResults();
+  setLoading(false);
+}
+
+// ─── RENDER RESULTS ─────────────────────────────────────────────────────────
+function renderAllResults() {
+  const container = document.getElementById('results-tramos');
+  container.innerHTML = '';
+  let totalDist = 0, totalDur = 0, totalKm = 0, totalToll = 0;
+
+  results.forEach(r => {
+    totalDist += r.distKm; totalDur += r.durSec; totalKm += r.kmCost; totalToll += r.toll;
+
+    let tagDetailsHtml = '';
+    if (r.tagDetails.length > 0) {
+      tagDetailsHtml = `<div class="mt-3 border-t pt-2"><p class="text-xs text-gray-500 mb-1">Detalle tags:</p><ul class="text-xs space-y-0.5">`;
+      r.tagDetails.forEach(t => {
+        tagDetailsHtml += `<li class="flex justify-between"><span class="text-gray-600">${t.section}</span><span class="font-medium">${fmt(t.price)}</span></li>`;
+      });
+      tagDetailsHtml += '</ul></div>';
+    }
+
+    container.innerHTML += `
+      <div class="bg-white rounded-2xl shadow-sm border p-5">
+        <div class="flex items-center gap-2 mb-3 flex-wrap">
+          <span class="inline-flex items-center justify-center w-6 h-6 rounded-full text-white text-xs font-bold shrink-0" style="background:${ROUTE_COLORS[r.idx]}">${ROUTE_LABELS[r.idx]}</span>
+          <span class="text-sm font-medium truncate max-w-[200px]">${escapeHtml(r.origin)}</span>
+          <span class="text-gray-400 text-sm shrink-0">→</span>
+          <span class="text-sm font-medium truncate max-w-[200px]">${escapeHtml(r.dest)}</span>
+          <span class="ml-auto px-2 py-0.5 rounded-full text-xs font-semibold shrink-0 ${PERIOD_CLASS[r.period]}">${PERIOD_LABEL[r.period]}</span>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          <div class="bg-gray-50 rounded-lg p-3 border"><p class="text-xs text-gray-500">Distancia</p><p class="font-bold">${r.distKm.toFixed(1)} km</p></div>
+          <div class="bg-gray-50 rounded-lg p-3 border"><p class="text-xs text-gray-500">Duración</p><p class="font-bold">${r.durText}</p></div>
+          <div class="bg-gray-50 rounded-lg p-3 border"><p class="text-xs text-gray-500">Costo km</p><p class="font-bold text-blue-700">${fmt(r.kmCost)}</p></div>
+          <div class="bg-gray-50 rounded-lg p-3 border"><p class="text-xs text-gray-500">Tags</p><p class="font-bold text-orange-600">${fmt(r.toll)}</p></div>
+        </div>
+        ${tagDetailsHtml}
+        <div class="mt-3 flex justify-end text-sm">
+          <span class="text-gray-500">Subtotal:</span>
+          <span class="font-bold ml-2">${fmt(r.kmCost + r.toll)}</span>
+        </div>
+      </div>`;
+  });
+
+  document.getElementById('gt-distance').textContent = totalDist.toFixed(1) + ' km';
+  document.getElementById('gt-duration').textContent = formatDuration(totalDur);
+  document.getElementById('gt-kmcost').textContent = fmt(totalKm);
+  document.getElementById('gt-toll').textContent = fmt(totalToll);
+  document.getElementById('gt-total').textContent = fmt(totalKm + totalToll);
+  document.getElementById('gt-info').textContent =
+    `${results.length} tramo${results.length > 1 ? 's' : ''} · Tarifa: $${KM_RATE.toLocaleString('es-CL')}/km · Vehículo: ${document.getElementById('vehicle').options[document.getElementById('vehicle').selectedIndex].text}`;
+
+  document.getElementById('results-section').classList.remove('hidden');
+  document.getElementById('results-section').scrollIntoView({ behavior: 'smooth' });
+}
+
+// ─── HELPERS ────────────────────────────────────────────────────────────────
+function formatDuration(secs) {
+  const h = Math.floor(secs / 3600);
+  const m = Math.round((secs % 3600) / 60);
+  return h > 0 ? `${h} h ${m} min` : `${m} min`;
+}
+
+function setLoading(on) {
+  document.getElementById('btn-text').textContent = on ? 'Calculando...' : 'Calcular todos los tramos';
+  document.getElementById('spinner').classList.toggle('hidden', !on);
+  document.getElementById('btn-calc').disabled = on;
+}
+
+function showError(msg) { const el = document.getElementById('error-msg'); el.textContent = msg; el.classList.remove('hidden'); }
+function clearError() { document.getElementById('error-msg').classList.add('hidden'); }
+function escapeHtml(str) { const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
+
+// ─── INIT ───────────────────────────────────────────────────────────────────
+(function init() {
+  document.getElementById('km-rate-display').value = KM_RATE;
+  addTramo();
+  if (API_KEY) {
+    document.getElementById('setup-modal').classList.add('hidden');
+    initMap();
+  }
+
+})();
+</script>
+</body>
+</html>
