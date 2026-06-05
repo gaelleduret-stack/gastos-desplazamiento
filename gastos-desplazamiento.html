@@ -173,118 +173,119 @@ const fmt = n => '$' + Math.round(n).toLocaleString('es-CL');
 // Sources: Chilevisión, El Mostrador, BioBioChile, AVO.cl, concesiones.mop.gob.cl
 // Each section has `gates`: lat/lng points. Route within GATE_RADIUS = detected.
 // Urbanas: punta/valle/nocturna. Interurbanas: punta=valle (sin diferenciación horaria).
-const GATE_RADIUS = 600;
+const GATE_RADIUS = 150; // metros — radio estricto para evitar falsos positivos
 
 // Valores = costo de UN pórtico representativo por sección (no la suma de todos).
+// minGates: mínimo de gates que la ruta debe cruzar para detectar el peaje (default 2)
 const DEFAULT_AUTOPISTAS = [
   {
     id: 'autopista-central', name: 'Autopista Central (Ruta 5)', type: 'urbana',
     sections: [
-      { id:'ac-norte', name:'Tramo Norte (Río Mapocho–Ruta 5 Norte)', punta:1024, valle:512, nocturna:256,
-        gates:[[-33.3630,-70.6545],[-33.3750,-70.6540],[-33.3900,-70.6535]] },
-      { id:'ac-centro', name:'Tramo Centro (Alameda–Río Mapocho)', punta:843, valle:421, nocturna:211,
-        gates:[[-33.4100,-70.6530],[-33.4250,-70.6530],[-33.4400,-70.6530]] },
-      { id:'ac-sur', name:'Tramo Sur (Ruta 5 Sur–Alameda)', punta:825, valle:462, nocturna:231,
-        gates:[[-33.4600,-70.6540],[-33.4750,-70.6560],[-33.4900,-70.6600]] },
+      { id:'ac-norte', name:'Tramo Norte (Río Mapocho–Ruta 5 Norte)', punta:1024, valle:512, nocturna:256, minGates:2,
+        gates:[[-33.3628,-70.6618],[-33.3720,-70.6605],[-33.3835,-70.6590],[-33.3950,-70.6570]] },
+      { id:'ac-centro', name:'Tramo Centro (Alameda–Río Mapocho)', punta:843, valle:421, nocturna:211, minGates:2,
+        gates:[[-33.4050,-70.6555],[-33.4170,-70.6545],[-33.4290,-70.6540],[-33.4390,-70.6540]] },
+      { id:'ac-sur', name:'Tramo Sur (Ruta 5 Sur–Alameda)', punta:825, valle:462, nocturna:231, minGates:2,
+        gates:[[-33.4520,-70.6555],[-33.4650,-70.6580],[-33.4780,-70.6620],[-33.4910,-70.6665]] },
     ]
   },
   {
     id: 'costanera-norte', name: 'Costanera Norte', type: 'urbana',
     sections: [
-      { id:'cn-oriente', name:'Tramo Oriente (Kennedy–Lo Saldes)', punta:819, valle:425, nocturna:213,
-        gates:[[-33.4100,-70.5900],[-33.4130,-70.6050],[-33.4180,-70.6200]] },
-      { id:'cn-poniente', name:'Tramo Poniente (Vivaceta–Américo Vespucio)', punta:1030, valle:535, nocturna:268,
-        gates:[[-33.4200,-70.6800],[-33.4230,-70.7000],[-33.4250,-70.7150]] },
-      { id:'cn-nororiente', name:'Variante Nororiente (Lo Saldes–El Salto)', punta:450, valle:233, nocturna:117,
-        gates:[[-33.4050,-70.6050],[-33.3980,-70.6100]] },
+      { id:'cn-oriente', name:'Tramo Oriente (Kennedy–Lo Saldes)', punta:819, valle:425, nocturna:213, minGates:2,
+        gates:[[-33.4068,-70.5820],[-33.4095,-70.5950],[-33.4130,-70.6080],[-33.4155,-70.6200]] },
+      { id:'cn-poniente', name:'Tramo Poniente (Vivaceta–Américo Vespucio)', punta:1030, valle:535, nocturna:268, minGates:2,
+        gates:[[-33.4180,-70.6720],[-33.4195,-70.6880],[-33.4200,-70.7050],[-33.4210,-70.7200]] },
+      { id:'cn-nororiente', name:'Variante Nororiente (Lo Saldes–El Salto)', punta:450, valle:233, nocturna:117, minGates:2,
+        gates:[[-33.4060,-70.5980],[-33.4010,-70.6030],[-33.3960,-70.6090]] },
     ]
   },
   {
     id: 'vespucio-norte', name: 'Vespucio Norte Express', type: 'urbana',
     sections: [
-      { id:'vn-oriente', name:'Sector Oriente (El Salto–Independencia)', punta:620, valle:455, nocturna:228,
-        gates:[[-33.3780,-70.6100],[-33.3800,-70.6250]] },
-      { id:'vn-centro', name:'Sector Central (Independencia–Ruta 5)', punta:517, valle:378, nocturna:189,
-        gates:[[-33.3770,-70.6450],[-33.3780,-70.6550]] },
-      { id:'vn-poniente', name:'Sector Poniente (Ruta 5–Quilicura)', punta:414, valle:300, nocturna:150,
-        gates:[[-33.3750,-70.6800],[-33.3700,-70.7000]] },
+      { id:'vn-oriente', name:'Sector Oriente (El Salto–Independencia)', punta:620, valle:455, nocturna:228, minGates:2,
+        gates:[[-33.3810,-70.6100],[-33.3800,-70.6220],[-33.3790,-70.6350]] },
+      { id:'vn-centro', name:'Sector Central (Independencia–Ruta 5)', punta:517, valle:378, nocturna:189, minGates:2,
+        gates:[[-33.3790,-70.6440],[-33.3785,-70.6530],[-33.3780,-70.6620]] },
+      { id:'vn-poniente', name:'Sector Poniente (Ruta 5–Quilicura)', punta:414, valle:300, nocturna:150, minGates:2,
+        gates:[[-33.3760,-70.6740],[-33.3730,-70.6880],[-33.3700,-70.7030]] },
     ]
   },
   {
     id: 'vespucio-sur', name: 'Vespucio Sur', type: 'urbana',
     sections: [
-      { id:'vs-oriente', name:'Sector Oriente (La Florida–Puente Alto)', punta:600, valle:300, nocturna:150,
-        gates:[[-33.5100,-70.5950],[-33.5200,-70.6050]] },
-      { id:'vs-centro', name:'Sector Central (Puente Alto–El Bosque)', punta:500, valle:250, nocturna:125,
-        gates:[[-33.5250,-70.6300],[-33.5200,-70.6500]] },
-      { id:'vs-poniente', name:'Sector Poniente (El Bosque–Maipú)', punta:600, valle:300, nocturna:150,
-        gates:[[-33.5050,-70.6750],[-33.4950,-70.6900]] },
+      { id:'vs-oriente', name:'Sector Oriente (La Florida–Puente Alto)', punta:600, valle:300, nocturna:150, minGates:2,
+        gates:[[-33.5080,-70.5910],[-33.5160,-70.5960],[-33.5240,-70.6020]] },
+      { id:'vs-centro', name:'Sector Central (Puente Alto–El Bosque)', punta:500, valle:250, nocturna:125, minGates:2,
+        gates:[[-33.5270,-70.6250],[-33.5230,-70.6400],[-33.5180,-70.6550]] },
+      { id:'vs-poniente', name:'Sector Poniente (El Bosque–Maipú)', punta:600, valle:300, nocturna:150, minGates:2,
+        gates:[[-33.5080,-70.6700],[-33.5000,-70.6830],[-33.4920,-70.6960]] },
     ]
   },
   {
     id: 'americo-vespucio-oriente', name: 'Américo Vespucio Oriente (AVO)', type: 'urbana',
     sections: [
-      { id:'avo-norte', name:'Tramo Norte (El Salto–Príncipe de Gales)', punta:534, valle:267, nocturna:134,
-        gates:[[-33.3950,-70.5880],[-33.4100,-70.5850]] },
-      { id:'avo-sur', name:'Tramo Sur (Príncipe de Gales–Grecia)', punta:464, valle:232, nocturna:116,
-        gates:[[-33.4300,-70.5830],[-33.4450,-70.5850]] },
+      { id:'avo-norte', name:'Tramo Norte (El Salto–Príncipe de Gales)', punta:534, valle:267, nocturna:134, minGates:2,
+        gates:[[-33.3950,-70.5870],[-33.4030,-70.5855],[-33.4120,-70.5845]] },
+      { id:'avo-sur', name:'Tramo Sur (Príncipe de Gales–Grecia)', punta:464, valle:232, nocturna:116, minGates:2,
+        gates:[[-33.4250,-70.5835],[-33.4350,-70.5830],[-33.4450,-70.5840]] },
     ]
   },
   {
     id: 'tunel-san-cristobal', name: 'Túnel San Cristóbal', type: 'urbana',
     sections: [
-      { id:'tsc-paso', name:'Paso por túnel', punta:1500, valle:1000, nocturna:500,
-        gates:[[-33.4170,-70.6340],[-33.4130,-70.6330]] },
+      { id:'tsc-paso', name:'Paso por túnel', punta:1500, valle:1000, nocturna:500, minGates:2,
+        gates:[[-33.4175,-70.6350],[-33.4155,-70.6340],[-33.4135,-70.6330]] },
     ]
   },
   {
     id: 'ruta-68', name: 'Ruta 68 (Santiago–Valparaíso)', type: 'interurbana',
     sections: [
-      { id:'r68-full', name:'Peaje Ruta 68', punta:4000, valle:2700, nocturna:2700,
-        gates:[[-33.3700,-71.0600],[-33.0500,-71.4400]] },
+      { id:'r68-zapata', name:'Peaje Zapata', punta:4000, valle:2700, nocturna:2700, minGates:1,
+        gates:[[-33.3850,-70.9380],[-33.3830,-70.9420]] },
     ]
   },
   {
     id: 'ruta-78', name: 'Ruta 78 – Autopista del Sol', type: 'interurbana',
     sections: [
-      { id:'r78-av', name:'Plaza Américo Vespucio', punta:1077, valle:718, nocturna:718,
-        gates:[[-33.4900,-70.7200]] },
-      { id:'r78-malloco', name:'Plaza Malloco', punta:338, valle:225, nocturna:225,
-        gates:[[-33.5300,-70.8500]] },
-      { id:'r78-talagante', name:'Plaza Talagante', punta:562, valle:375, nocturna:375,
-        gates:[[-33.6600,-71.1800]] },
+      { id:'r78-av', name:'Plaza Américo Vespucio', punta:1077, valle:718, nocturna:718, minGates:1,
+        gates:[[-33.4920,-70.7250],[-33.4940,-70.7270]] },
+      { id:'r78-malloco', name:'Plaza Malloco', punta:338, valle:225, nocturna:225, minGates:1,
+        gates:[[-33.5280,-70.8480],[-33.5300,-70.8510]] },
+      { id:'r78-talagante', name:'Plaza Talagante', punta:562, valle:375, nocturna:375, minGates:1,
+        gates:[[-33.6550,-71.1750],[-33.6570,-71.1780]] },
     ]
   },
   {
     id: 'ruta-5-sur', name: 'Ruta 5 Sur', type: 'interurbana',
     sections: [
-      { id:'r5s-accesosur', name:'Acceso Sur (troncal)', punta:1400, valle:1400, nocturna:1400,
-        gates:[[-33.5800,-70.6500]] },
-      { id:'r5s-angostura', name:'Plaza Angostura', punta:3800, valle:3800, nocturna:3800,
-        gates:[[-33.8500,-70.7200]] },
+      { id:'r5s-accesosur', name:'Acceso Sur (troncal)', punta:1400, valle:1400, nocturna:1400, minGates:1,
+        gates:[[-33.5780,-70.6520],[-33.5810,-70.6530]] },
+      { id:'r5s-angostura', name:'Plaza Angostura', punta:3800, valle:3800, nocturna:3800, minGates:1,
+        gates:[[-33.8480,-70.7180],[-33.8510,-70.7200]] },
     ]
   },
   {
     id: 'ruta-5-norte', name: 'Ruta 5 Norte', type: 'interurbana',
     sections: [
-      { id:'r5n-lampa', name:'Plaza Lampa', punta:2895, valle:2895, nocturna:2895,
-        gates:[[-33.2700,-70.8700]] },
+      { id:'r5n-lampa', name:'Plaza Lampa', punta:2895, valle:2895, nocturna:2895, minGates:1,
+        gates:[[-33.2680,-70.8680],[-33.2710,-70.8710]] },
     ]
   },
   {
     id: 'ruta-57', name: 'Ruta 57 – Los Libertadores', type: 'interurbana',
     sections: [
-      { id:'r57-colina', name:'Plaza Colina', punta:2275, valle:2275, nocturna:2275,
-        gates:[[-33.1800,-70.6700]] },
+      { id:'r57-colina', name:'Plaza Colina', punta:2275, valle:2275, nocturna:2275, minGates:1,
+        gates:[[-33.1780,-70.6680],[-33.1810,-70.6700]] },
     ]
   },
   {
     id: 'autopista-nororiente', name: 'Autopista Nororiente', type: 'interurbana',
     sections: [
-      { id:'nor-oriente', name:'Sector Oriente', punta:6173, valle:4116, nocturna:4116,
-        gates:[[-33.3500,-70.5200]] },
-      { id:'nor-poniente', name:'Sector Poniente', punta:4116, valle:2744, nocturna:2744,
-        gates:[[-33.3200,-70.5800]] },
+      { id:'nor-oriente', name:'Sector Oriente', punta:6173, valle:4116, nocturna:4116, minGates:1,
+        gates:[[-33.3480,-70.5180],[-33.3510,-70.5210]] },
+      { id:'nor-poniente', name:'Sector Poniente', punta:4116, valle:2744, nocturna:2744, minGates:1,
+        gates:[[-33.3180,-70.5780],[-33.3210,-70.5810]] },
     ]
   },
 ];
@@ -300,7 +301,7 @@ function haversineMeters(lat1, lon1, lat2, lon2) {
 }
 
 // ─── AUTO-DETECT TOLLS FROM ROUTE GEOMETRY ──────────────────────────────────
-const TARIFF_VERSION = '2026-01';
+const TARIFF_VERSION = '2026-05';
 function loadAutopistas() {
   const ver = localStorage.getItem('autopistas_version');
   if (ver === TARIFF_VERSION) {
@@ -369,7 +370,7 @@ function openTarifas() {
       } else {
         html += `<tr class="border-b last:border-0">
           <td class="px-4 py-2">${s.name}</td>
-          <td class="px-2 py-2"><input type="number" class="tarifa-input w-full border rounded px-2 py-1 text-center" data-ap="${ai}" data-sec="${si}" data-field="flat" value="${s.flat}" min="0" /></td>
+          <td class="px-2 py-2"><input type="number" class="tarifa-input w-full border rounded px-2 py-1 text-center" data-ap="${ai}" data-sec="${si}" data-field="punta" value="${s.punta}" min="0" onchange="this.closest('tr').querySelectorAll('[data-field=valle],[data-field=nocturna]').forEach(h=>{h.value=this.value})" /><input type="hidden" class="tarifa-input" data-ap="${ai}" data-sec="${si}" data-field="valle" value="${s.valle}" /><input type="hidden" class="tarifa-input" data-ap="${ai}" data-sec="${si}" data-field="nocturna" value="${s.nocturna}" /></td>
         </tr>`;
       }
     });
@@ -547,14 +548,14 @@ function calcTollsFromRoute(routeCoords, period) {
   AUTOPISTAS.forEach(ap => {
     ap.sections.forEach(sec => {
       const gates = sec.gates || [];
-      let found = false;
+      const minRequired = sec.minGates || 2;
+      let gatesHit = 0;
       for (const gate of gates) {
         for (const pt of sampled) {
-          if (haversineMeters(gate[0], gate[1], pt[1], pt[0]) < GATE_RADIUS) { found = true; break; }
+          if (haversineMeters(gate[0], gate[1], pt[1], pt[0]) < GATE_RADIUS) { gatesHit++; break; }
         }
-        if (found) break;
       }
-      if (found) {
+      if (gatesHit >= minRequired) {
         const price = getSectionPrice(sec, period);
         detected.push({
           highway: ap.name,
