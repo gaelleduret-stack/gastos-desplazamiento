@@ -99,6 +99,13 @@
         <label class="block text-sm font-medium mb-1">Tarifa km (CLP)</label>
         <input id="km-rate-display" type="number" min="1" class="w-full border rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
       </div>
+      <div class="min-w-[160px]">
+        <label class="block text-sm font-medium mb-1">Preferencia de ruta</label>
+        <select id="route-pref" class="w-full border rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="recommended">Recomendada</option>
+          <option value="fastest" selected>Más rápida (autopistas)</option>
+        </select>
+      </div>
       <div class="flex items-center gap-2 text-sm text-gray-500">
         <span id="tramo-count">1</span>/5 tramos
       </div>
@@ -693,10 +700,19 @@ async function resolveCoords(input) {
 
 // ─── ORS DIRECTIONS ─────────────────────────────────────────────────────────
 async function fetchRoute(originCoords, destCoords) {
+  const pref = document.getElementById('route-pref')?.value || 'fastest';
+  const body = { coordinates: [originCoords, destCoords], instructions: false };
+  if (pref === 'fastest') {
+    // Prefer highways: penalize non-highway roads heavily
+    body.options = { avoid_features: ['ferries'] };
+    body.preference = 'fastest';
+  } else {
+    body.preference = 'recommended';
+  }
   const resp = await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': API_KEY },
-    body: JSON.stringify({ coordinates: [originCoords, destCoords], instructions: false })
+    body: JSON.stringify(body)
   });
   if (!resp.ok) throw new Error('Error ORS: ' + (await resp.text()));
   return await resp.json();
