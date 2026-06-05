@@ -99,13 +99,6 @@
         <label class="block text-sm font-medium mb-1">Tarifa km (CLP)</label>
         <input id="km-rate-display" type="number" min="1" class="w-full border rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
       </div>
-      <div class="min-w-[160px]">
-        <label class="block text-sm font-medium mb-1">Preferencia de ruta</label>
-        <select id="route-pref" class="w-full border rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="recommended">Recomendada</option>
-          <option value="fastest" selected>Más rápida (autopistas)</option>
-        </select>
-      </div>
       <div class="flex items-center gap-2 text-sm text-gray-500">
         <span id="tramo-count">1</span>/5 tramos
       </div>
@@ -700,19 +693,10 @@ async function resolveCoords(input) {
 
 // ─── ORS DIRECTIONS ─────────────────────────────────────────────────────────
 async function fetchRoute(originCoords, destCoords) {
-  const pref = document.getElementById('route-pref')?.value || 'fastest';
-  const body = { coordinates: [originCoords, destCoords], instructions: false };
-  if (pref === 'fastest') {
-    // Prefer highways: penalize non-highway roads heavily
-    body.options = { avoid_features: ['ferries'] };
-    body.preference = 'fastest';
-  } else {
-    body.preference = 'recommended';
-  }
   const resp = await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': API_KEY },
-    body: JSON.stringify(body)
+    body: JSON.stringify({ coordinates: [originCoords, destCoords], instructions: false, preference: 'fastest' })
   });
   if (!resp.ok) throw new Error('Error ORS: ' + (await resp.text()));
   return await resp.json();
@@ -823,7 +807,7 @@ function renderAllResults() {
     }
 
     container.innerHTML += `
-      <div class="bg-white rounded-2xl shadow-sm border p-5">
+      <div class="bg-white rounded-2xl shadow-sm border p-5" id="result-${r.idx}">
         <div class="flex items-center gap-2 mb-3 flex-wrap">
           <span class="inline-flex items-center justify-center w-6 h-6 rounded-full text-white text-xs font-bold shrink-0" style="background:${ROUTE_COLORS[r.idx]}">${ROUTE_LABELS[r.idx]}</span>
           <span class="text-sm font-medium truncate max-w-[200px]">${escapeHtml(r.origin)}</span>
@@ -832,15 +816,19 @@ function renderAllResults() {
           <span class="ml-auto px-2 py-0.5 rounded-full text-xs font-semibold shrink-0 ${PERIOD_CLASS[r.period]}">${PERIOD_LABEL[r.period]}</span>
         </div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-          <div class="bg-gray-50 rounded-lg p-3 border"><p class="text-xs text-gray-500">Distancia</p><p class="font-bold">${r.distKm.toFixed(1)} km</p></div>
+          <div class="bg-gray-50 rounded-lg p-3 border">
+            <p class="text-xs text-gray-500">Distancia</p>
+            <p class="font-bold">${r.distKm.toFixed(1)} km</p>
+            <button onclick="adjustDistance(${r.idx})" class="text-[10px] text-blue-500 hover:underline mt-1 no-print">✏️ Ajustar</button>
+          </div>
           <div class="bg-gray-50 rounded-lg p-3 border"><p class="text-xs text-gray-500">Duración</p><p class="font-bold">${r.durText}</p></div>
-          <div class="bg-gray-50 rounded-lg p-3 border"><p class="text-xs text-gray-500">Costo km</p><p class="font-bold text-blue-700">${fmt(r.kmCost)}</p></div>
+          <div class="bg-gray-50 rounded-lg p-3 border"><p class="text-xs text-gray-500">Costo km</p><p class="font-bold text-blue-700" id="kmcost-${r.idx}">${fmt(r.kmCost)}</p></div>
           <div class="bg-gray-50 rounded-lg p-3 border"><p class="text-xs text-gray-500">Tags</p><p class="font-bold text-orange-600">${fmt(r.toll)}</p></div>
         </div>
         ${tagDetailsHtml}
         <div class="mt-3 flex justify-end text-sm">
           <span class="text-gray-500">Subtotal:</span>
-          <span class="font-bold ml-2">${fmt(r.kmCost + r.toll)}</span>
+          <span class="font-bold ml-2" id="subtotal-${r.idx}">${fmt(r.kmCost + r.toll)}</span>
         </div>
       </div>`;
   });
@@ -850,11 +838,24 @@ function renderAllResults() {
   document.getElementById('gt-kmcost').textContent = fmt(totalKm);
   document.getElementById('gt-toll').textContent = fmt(totalToll);
   document.getElementById('gt-total').textContent = fmt(totalKm + totalToll);
-  document.getElementById('gt-info').textContent =
-    `${results.length} tramo${results.length > 1 ? 's' : ''} · Tarifa: $${KM_RATE.toLocaleString('es-CL')}/km · Vehículo: ${document.getElementById('vehicle').options[document.getElementById('vehicle').selectedIndex].text}`;
+  document.getElementById('gt-info').innerHTML =
+    `${results.length} tramo${results.length > 1 ? 's' : ''} · Tarifa: $${KM_RATE.toLocaleString('es-CL')}/km · Vehículo: ${document.getElementById('vehicle').options[document.getElementById('vehicle').selectedIndex].text}<br><span class="text-amber-600">💡 Si la distancia difiere de Waze/Google Maps, haz clic en "✏️ Ajustar" en cada tramo para corregir los km.</span>`;
 
   document.getElementById('results-section').classList.remove('hidden');
   document.getElementById('results-section').scrollIntoView({ behavior: 'smooth' });
+}
+
+// ─── ADJUST DISTANCE ────────────────────────────────────────────────────────
+function adjustDistance(idx) {
+  const r = results.find(r => r.idx === idx);
+  if (!r) return;
+  const newKm = prompt(`Distancia actual: ${r.distKm.toFixed(1)} km\n\nIngresa la distancia real (ej: de Waze o Google Maps):`, r.distKm.toFixed(1));
+  if (newKm === null) return;
+  const km = parseFloat(newKm);
+  if (isNaN(km) || km <= 0) { alert('Distancia inválida'); return; }
+  r.distKm = km;
+  r.kmCost = km * KM_RATE;
+  renderAllResults();
 }
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
