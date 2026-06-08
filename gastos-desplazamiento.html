@@ -154,7 +154,7 @@ const PERIOD_CLASS = { punta:'period-punta', valle:'period-valle', nocturna:'per
 const fmt = n => '$' + Math.round(n).toLocaleString('es-CL');
 
 // ─── TARIFF DATABASE 2026 ──────────────────────────────────────────────────
-const GATE_RADIUS = 150;
+const GATE_RADIUS = 300; // metros — balanceado para Google Maps route geometry
 const TARIFF_VERSION = '2026-05-gm';
 
 const DEFAULT_AUTOPISTAS = [
@@ -564,8 +564,11 @@ async function calcTramo(idx) {
   const period = getTollPeriod(departure);
   const kmCost = Math.round(distKm * KM_RATE);
 
-  // Get route path for toll detection
-  const routePath = result.routes[0].overview_path;
+  // Get DETAILED route path for toll detection (overview_path is too simplified)
+  const routePath = [];
+  result.routes[0].legs[0].steps.forEach(step => {
+    step.path.forEach(pt => routePath.push(pt));
+  });
   const tagDetails = calcTollsFromRoute(routePath, period);
   const toll = tagDetails.reduce((sum, t) => sum + t.price, 0);
 
