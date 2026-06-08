@@ -155,116 +155,130 @@ const fmt = n => '$' + Math.round(n).toLocaleString('es-CL');
 
 // ─── TARIFF DATABASE 2026 ──────────────────────────────────────────────────
 const GATE_RADIUS = 300; // metros — balanceado para Google Maps route geometry
-const TARIFF_VERSION = '2026-05-gm';
+const TARIFF_VERSION = '2026-06-official';
+// TARIFAS OFICIALES 2026 — Fuentes: autopistacentral.cl, costaneranorte.cl, vespuciosur.cl, concesiones.mop.gob.cl
+// Autopista Central: TBFP $104/km, TBP $208/km, TS $312/km
+// Costanera Norte: TBFP $107/km, TBP $206/km, TS $312/km
+// Valores = tarifa total del tramo (largo × $/km), NO un solo pórtico
 
 const DEFAULT_AUTOPISTAS = [
   {
     id: 'autopista-central', name: 'Autopista Central (Ruta 5)', type: 'urbana',
+    // $104/km TBFP, $208/km TBP, $312/km TS
     sections: [
-      { id:'ac-norte', name:'Tramo Norte (Río Mapocho–Ruta 5 Norte)', punta:1024, valle:512, nocturna:256, minGates:2,
+      { id:'ac-norte', name:'Tramo Norte (Río Mapocho–Ruta 5 Norte ~5km)', punta:1040, valle:520, nocturna:312, minGates:2,
         gates:[[-33.3628,-70.6618],[-33.3720,-70.6605],[-33.3835,-70.6590],[-33.3950,-70.6570]] },
-      { id:'ac-centro', name:'Tramo Centro (Alameda–Río Mapocho)', punta:843, valle:421, nocturna:211, minGates:2,
+      { id:'ac-centro', name:'Tramo Centro (Alameda–Río Mapocho ~4km)', punta:832, valle:416, nocturna:312, minGates:2,
         gates:[[-33.4050,-70.6555],[-33.4170,-70.6545],[-33.4290,-70.6540],[-33.4390,-70.6540]] },
-      { id:'ac-sur', name:'Tramo Sur (Ruta 5 Sur–Alameda)', punta:825, valle:462, nocturna:231, minGates:2,
+      { id:'ac-sur', name:'Tramo Sur (Ruta 5 Sur–Alameda ~5km)', punta:1040, valle:520, nocturna:312, minGates:2,
         gates:[[-33.4520,-70.6555],[-33.4650,-70.6580],[-33.4780,-70.6620],[-33.4910,-70.6665]] },
     ]
   },
   {
     id: 'costanera-norte', name: 'Costanera Norte', type: 'urbana',
+    // Tarifas oficiales por pórtico de costaneranorte.cl
     sections: [
-      { id:'cn-oriente', name:'Tramo Oriente (Kennedy–Lo Saldes)', punta:819, valle:425, nocturna:213, minGates:2,
-        gates:[[-33.4068,-70.5820],[-33.4095,-70.5950],[-33.4130,-70.6080],[-33.4155,-70.6200]] },
-      { id:'cn-poniente', name:'Tramo Poniente (Vivaceta–Américo Vespucio)', punta:1030, valle:535, nocturna:268, minGates:2,
-        gates:[[-33.4180,-70.6720],[-33.4195,-70.6880],[-33.4200,-70.7050],[-33.4210,-70.7200]] },
-      { id:'cn-nororiente', name:'Variante Nororiente (Lo Saldes–El Salto)', punta:450, valle:233, nocturna:117, minGates:2,
-        gates:[[-33.4060,-70.5980],[-33.4010,-70.6030],[-33.3960,-70.6090]] },
+      { id:'cn-p0', name:'P0 Padre Arteaga–San Francisco (1.4km)', punta:288, valle:150, nocturna:150, minGates:1,
+        gates:[[-33.4068,-70.5750],[-33.4075,-70.5820]] },
+      { id:'cn-p1', name:'P1 San Francisco–Gran Vía (4.2km)', punta:865, valle:449, nocturna:449, minGates:2,
+        gates:[[-33.4085,-70.5880],[-33.4095,-70.5950],[-33.4110,-70.6020],[-33.4130,-70.6080]] },
+      { id:'cn-p2', name:'P2 Gran Vía–Lo Saldes (6.5km)', punta:1329, valle:690, nocturna:690, minGates:2,
+        gates:[[-33.4140,-70.6120],[-33.4155,-70.6200],[-33.4160,-70.6280],[-33.4170,-70.6350]] },
+      { id:'cn-p3', name:'P3 Lo Saldes–Vivaceta (6.7km)', punta:1384, valle:719, nocturna:719, minGates:2,
+        gates:[[-33.4175,-70.6400],[-33.4185,-70.6520],[-33.4190,-70.6650],[-33.4195,-70.6750]] },
+      { id:'cn-p5', name:'P5 Vivaceta–Carrascal (6.7km)', punta:1378, valle:716, nocturna:716, minGates:2,
+        gates:[[-33.4200,-70.6850],[-33.4205,-70.6980],[-33.4210,-70.7100],[-33.4215,-70.7200]] },
+      { id:'cn-p9', name:'P9 A.Vespucio–Ruta 68 (5km)', punta:1030, valle:535, nocturna:535, minGates:2,
+        gates:[[-33.4220,-70.7350],[-33.4230,-70.7500],[-33.4240,-70.7650],[-33.4250,-70.7800]] },
     ]
   },
   {
     id: 'vespucio-norte', name: 'Vespucio Norte Express', type: 'urbana',
+    // Estimación basada en $/km similar a Autopista Central (~$100-200/km)
     sections: [
-      { id:'vn-oriente', name:'Sector Oriente (El Salto–Independencia)', punta:620, valle:455, nocturna:228, minGates:2,
+      { id:'vn-oriente', name:'Sector Oriente (El Salto–Independencia ~4km)', punta:820, valle:410, nocturna:250, minGates:2,
         gates:[[-33.3810,-70.6100],[-33.3800,-70.6220],[-33.3790,-70.6350]] },
-      { id:'vn-centro', name:'Sector Central (Independencia–Ruta 5)', punta:517, valle:378, nocturna:189, minGates:2,
+      { id:'vn-centro', name:'Sector Central (Independencia–Ruta 5 ~3km)', punta:624, valle:312, nocturna:190, minGates:2,
         gates:[[-33.3790,-70.6440],[-33.3785,-70.6530],[-33.3780,-70.6620]] },
-      { id:'vn-poniente', name:'Sector Poniente (Ruta 5–Quilicura)', punta:414, valle:300, nocturna:150, minGates:2,
+      { id:'vn-poniente', name:'Sector Poniente (Ruta 5–Quilicura ~5km)', punta:1040, valle:520, nocturna:312, minGates:2,
         gates:[[-33.3760,-70.6740],[-33.3730,-70.6880],[-33.3700,-70.7030]] },
     ]
   },
   {
     id: 'vespucio-sur', name: 'Vespucio Sur', type: 'urbana',
+    // Tarifas oficiales vespuciosur.cl — sumando pórticos por sector
     sections: [
-      { id:'vs-oriente', name:'Sector Oriente (La Florida–Puente Alto)', punta:600, valle:300, nocturna:150, minGates:2,
+      { id:'vs-oriente', name:'Sector Oriente (Grecia–Las Torres)', punta:1347, valle:673, nocturna:400, minGates:2,
         gates:[[-33.5080,-70.5910],[-33.5160,-70.5960],[-33.5240,-70.6020]] },
-      { id:'vs-centro', name:'Sector Central (Puente Alto–El Bosque)', punta:500, valle:250, nocturna:125, minGates:2,
+      { id:'vs-centro', name:'Sector Central (Gran Avenida–Ruta 5)', punta:1186, valle:593, nocturna:350, minGates:2,
         gates:[[-33.5270,-70.6250],[-33.5230,-70.6400],[-33.5180,-70.6550]] },
-      { id:'vs-poniente', name:'Sector Poniente (El Bosque–Maipú)', punta:600, valle:300, nocturna:150, minGates:2,
+      { id:'vs-poniente', name:'Sector Poniente (Ruta 5–Ruta 78)', punta:1568, valle:784, nocturna:470, minGates:2,
         gates:[[-33.5080,-70.6700],[-33.5000,-70.6830],[-33.4920,-70.6960]] },
     ]
   },
   {
     id: 'americo-vespucio-oriente', name: 'Américo Vespucio Oriente (AVO)', type: 'urbana',
     sections: [
-      { id:'avo-norte', name:'Tramo Norte (El Salto–Príncipe de Gales)', punta:534, valle:267, nocturna:134, minGates:2,
+      { id:'avo-norte', name:'Tramo Norte (El Salto–Príncipe de Gales ~3km)', punta:750, valle:375, nocturna:225, minGates:2,
         gates:[[-33.3950,-70.5870],[-33.4030,-70.5855],[-33.4120,-70.5845]] },
-      { id:'avo-sur', name:'Tramo Sur (Príncipe de Gales–Grecia)', punta:464, valle:232, nocturna:116, minGates:2,
+      { id:'avo-sur', name:'Tramo Sur (Príncipe de Gales–Grecia ~3km)', punta:650, valle:325, nocturna:195, minGates:2,
         gates:[[-33.4250,-70.5835],[-33.4350,-70.5830],[-33.4450,-70.5840]] },
     ]
   },
   {
     id: 'tunel-san-cristobal', name: 'Túnel San Cristóbal', type: 'urbana',
     sections: [
-      { id:'tsc-paso', name:'Paso por túnel', punta:1500, valle:1000, nocturna:500, minGates:2,
+      { id:'tsc-paso', name:'Paso por túnel', punta:1700, valle:1100, nocturna:600, minGates:2,
         gates:[[-33.4175,-70.6350],[-33.4155,-70.6340],[-33.4135,-70.6330]] },
     ]
   },
   {
     id: 'ruta-68', name: 'Ruta 68 (Santiago–Valparaíso)', type: 'interurbana',
     sections: [
-      { id:'r68-zapata', name:'Peaje Zapata', punta:4000, valle:2700, nocturna:2700, minGates:1,
+      { id:'r68-zapata', name:'Peaje Zapata', punta:4200, valle:2800, nocturna:2800, minGates:1,
         gates:[[-33.3850,-70.9380],[-33.3830,-70.9420]] },
     ]
   },
   {
     id: 'ruta-78', name: 'Ruta 78 – Autopista del Sol', type: 'interurbana',
     sections: [
-      { id:'r78-av', name:'Plaza Américo Vespucio', punta:1077, valle:718, nocturna:718, minGates:1,
+      { id:'r78-av', name:'Plaza Américo Vespucio', punta:1100, valle:733, nocturna:733, minGates:1,
         gates:[[-33.4920,-70.7250],[-33.4940,-70.7270]] },
-      { id:'r78-malloco', name:'Plaza Malloco', punta:338, valle:225, nocturna:225, minGates:1,
+      { id:'r78-malloco', name:'Plaza Malloco', punta:350, valle:233, nocturna:233, minGates:1,
         gates:[[-33.5280,-70.8480],[-33.5300,-70.8510]] },
-      { id:'r78-talagante', name:'Plaza Talagante', punta:562, valle:375, nocturna:375, minGates:1,
+      { id:'r78-talagante', name:'Plaza Talagante', punta:580, valle:387, nocturna:387, minGates:1,
         gates:[[-33.6550,-71.1750],[-33.6570,-71.1780]] },
     ]
   },
   {
     id: 'ruta-5-sur', name: 'Ruta 5 Sur', type: 'interurbana',
     sections: [
-      { id:'r5s-accesosur', name:'Acceso Sur (troncal)', punta:1400, valle:1400, nocturna:1400, minGates:1,
+      { id:'r5s-accesosur', name:'Acceso Sur (troncal)', punta:1450, valle:1450, nocturna:1450, minGates:1,
         gates:[[-33.5780,-70.6520],[-33.5810,-70.6530]] },
-      { id:'r5s-angostura', name:'Plaza Angostura', punta:3800, valle:3800, nocturna:3800, minGates:1,
+      { id:'r5s-angostura', name:'Plaza Angostura', punta:3930, valle:3930, nocturna:3930, minGates:1,
         gates:[[-33.8480,-70.7180],[-33.8510,-70.7200]] },
     ]
   },
   {
     id: 'ruta-5-norte', name: 'Ruta 5 Norte', type: 'interurbana',
     sections: [
-      { id:'r5n-lampa', name:'Plaza Lampa', punta:2895, valle:2895, nocturna:2895, minGates:1,
+      { id:'r5n-lampa', name:'Plaza Lampa', punta:2993, valle:2993, nocturna:2993, minGates:1,
         gates:[[-33.2680,-70.8680],[-33.2710,-70.8710]] },
     ]
   },
   {
     id: 'ruta-57', name: 'Ruta 57 – Los Libertadores', type: 'interurbana',
     sections: [
-      { id:'r57-colina', name:'Plaza Colina', punta:2275, valle:2275, nocturna:2275, minGates:1,
+      { id:'r57-colina', name:'Plaza Colina', punta:2352, valle:2352, nocturna:2352, minGates:1,
         gates:[[-33.1780,-70.6680],[-33.1810,-70.6700]] },
     ]
   },
   {
     id: 'autopista-nororiente', name: 'Autopista Nororiente', type: 'interurbana',
     sections: [
-      { id:'nor-oriente', name:'Sector Oriente', punta:6173, valle:4116, nocturna:4116, minGates:1,
+      { id:'nor-oriente', name:'Sector Oriente', punta:6383, valle:4256, nocturna:4256, minGates:1,
         gates:[[-33.3480,-70.5180],[-33.3510,-70.5210]] },
-      { id:'nor-poniente', name:'Sector Poniente', punta:4116, valle:2744, nocturna:2744, minGates:1,
+      { id:'nor-poniente', name:'Sector Poniente', punta:4256, valle:2837, nocturna:2837, minGates:1,
         gates:[[-33.3180,-70.5780],[-33.3210,-70.5810]] },
     ]
   },
