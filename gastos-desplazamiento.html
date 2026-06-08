@@ -154,7 +154,7 @@ const PERIOD_CLASS = { punta:'period-punta', valle:'period-valle', nocturna:'per
 const fmt = n => '$' + Math.round(n).toLocaleString('es-CL');
 
 // ─── TARIFF DATABASE 2026 ──────────────────────────────────────────────────
-const GATE_RADIUS = 200; // metros — preciso para Google Maps detailed path
+const GATE_RADIUS = 250; // metros — balanced for Google Maps detailed route path
 const TARIFF_VERSION = '2026-06-official';
 // TARIFAS OFICIALES 2026 — Fuentes: autopistacentral.cl, costaneranorte.cl, vespuciosur.cl, concesiones.mop.gob.cl
 // Autopista Central: TBFP $104/km, TBP $208/km, TS $312/km
@@ -182,7 +182,7 @@ const DEFAULT_AUTOPISTAS = [
     // Poniente = desde Vivaceta hasta Ruta 68 (P5+P6+P9)
     sections: [
       { id:'cn-oriente', name:'Costanera Norte Oriente (Kennedy–Vivaceta)', punta:1384, valle:719, nocturna:719, minGates:2,
-        gates:[[-33.4075,-70.5850],[-33.4082,-70.5950],[-33.4090,-70.6050],[-33.4110,-70.6100],[-33.4150,-70.6180],[-33.4200,-70.6280]] },
+        gates:[[-33.4078,-70.5850],[-33.4080,-70.5940],[-33.4085,-70.6010],[-33.4090,-70.6050],[-33.4095,-70.6065],[-33.4130,-70.6073],[-33.4162,-70.6082],[-33.4195,-70.6120],[-33.4220,-70.6175]] },
       { id:'cn-poniente', name:'Costanera Norte Poniente (Vivaceta–Ruta 68)', punta:2408, valle:1251, nocturna:1251, minGates:2,
         gates:[[-33.4225,-70.6650],[-33.4230,-70.6800],[-33.4240,-70.6950],[-33.4250,-70.7200],[-33.4255,-70.7450]] },
     ]
