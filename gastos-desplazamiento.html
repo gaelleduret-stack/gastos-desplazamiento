@@ -154,7 +154,7 @@ const PERIOD_CLASS = { punta:'period-punta', valle:'period-valle', nocturna:'per
 const fmt = n => '$' + Math.round(n).toLocaleString('es-CL');
 
 // ─── TARIFF DATABASE 2026 ──────────────────────────────────────────────────
-const GATE_RADIUS = 300; // metros — balanceado para Google Maps route geometry
+const GATE_RADIUS = 200; // metros — preciso para Google Maps detailed path
 const TARIFF_VERSION = '2026-06-official';
 // TARIFAS OFICIALES 2026 — Fuentes: autopistacentral.cl, costaneranorte.cl, vespuciosur.cl, concesiones.mop.gob.cl
 // Autopista Central: TBFP $104/km, TBP $208/km, TS $312/km
@@ -164,32 +164,33 @@ const TARIFF_VERSION = '2026-06-official';
 const DEFAULT_AUTOPISTAS = [
   {
     id: 'autopista-central', name: 'Autopista Central (Ruta 5)', type: 'urbana',
-    // $104/km TBFP, $208/km TBP, $312/km TS
+    // $104/km TBFP, $208/km TBP, $312/km TS — gates precisely on Ruta 5 (lng ~-70.653)
     sections: [
       { id:'ac-norte', name:'Tramo Norte (Río Mapocho–Ruta 5 Norte ~5km)', punta:1040, valle:520, nocturna:312, minGates:2,
-        gates:[[-33.3628,-70.6618],[-33.3720,-70.6605],[-33.3835,-70.6590],[-33.3950,-70.6570]] },
+        gates:[[-33.3630,-70.6530],[-33.3720,-70.6535],[-33.3835,-70.6540],[-33.3950,-70.6545]] },
       { id:'ac-centro', name:'Tramo Centro (Alameda–Río Mapocho ~4km)', punta:832, valle:416, nocturna:312, minGates:2,
-        gates:[[-33.4050,-70.6555],[-33.4170,-70.6545],[-33.4290,-70.6540],[-33.4390,-70.6540]] },
+        gates:[[-33.4080,-70.6550],[-33.4200,-70.6545],[-33.4320,-70.6545],[-33.4430,-70.6545]] },
       { id:'ac-sur', name:'Tramo Sur (Ruta 5 Sur–Alameda ~5km)', punta:1040, valle:520, nocturna:312, minGates:2,
-        gates:[[-33.4520,-70.6555],[-33.4650,-70.6580],[-33.4780,-70.6620],[-33.4910,-70.6665]] },
+        gates:[[-33.4550,-70.6555],[-33.4680,-70.6575],[-33.4800,-70.6610],[-33.4920,-70.6650]] },
     ]
   },
   {
     id: 'costanera-norte', name: 'Costanera Norte', type: 'urbana',
     // Tarifas oficiales por pórtico de costaneranorte.cl
+    // Gates on actual Costanera Norte highway along Mapocho river corridor
     sections: [
       { id:'cn-p0', name:'P0 Padre Arteaga–San Francisco (1.4km)', punta:288, valle:150, nocturna:150, minGates:1,
-        gates:[[-33.4068,-70.5750],[-33.4075,-70.5820]] },
+        gates:[[-33.4065,-70.5700],[-33.4070,-70.5780]] },
       { id:'cn-p1', name:'P1 San Francisco–Gran Vía (4.2km)', punta:865, valle:449, nocturna:449, minGates:2,
-        gates:[[-33.4085,-70.5880],[-33.4095,-70.5950],[-33.4110,-70.6020],[-33.4130,-70.6080]] },
+        gates:[[-33.4075,-70.5830],[-33.4080,-70.5900],[-33.4082,-70.5960],[-33.4085,-70.6000]] },
       { id:'cn-p2', name:'P2 Gran Vía–Lo Saldes (6.5km)', punta:1329, valle:690, nocturna:690, minGates:2,
-        gates:[[-33.4140,-70.6120],[-33.4155,-70.6200],[-33.4160,-70.6280],[-33.4170,-70.6350]] },
+        gates:[[-33.4088,-70.6040],[-33.4095,-70.6070],[-33.4110,-70.6100],[-33.4125,-70.6130]] },
       { id:'cn-p3', name:'P3 Lo Saldes–Vivaceta (6.7km)', punta:1384, valle:719, nocturna:719, minGates:2,
-        gates:[[-33.4175,-70.6400],[-33.4185,-70.6520],[-33.4190,-70.6650],[-33.4195,-70.6750]] },
+        gates:[[-33.4140,-70.6150],[-33.4170,-70.6200],[-33.4200,-70.6260],[-33.4215,-70.6350]] },
       { id:'cn-p5', name:'P5 Vivaceta–Carrascal (6.7km)', punta:1378, valle:716, nocturna:716, minGates:2,
-        gates:[[-33.4200,-70.6850],[-33.4205,-70.6980],[-33.4210,-70.7100],[-33.4215,-70.7200]] },
+        gates:[[-33.4225,-70.6600],[-33.4230,-70.6700],[-33.4235,-70.6800],[-33.4240,-70.6900]] },
       { id:'cn-p9', name:'P9 A.Vespucio–Ruta 68 (5km)', punta:1030, valle:535, nocturna:535, minGates:2,
-        gates:[[-33.4220,-70.7350],[-33.4230,-70.7500],[-33.4240,-70.7650],[-33.4250,-70.7800]] },
+        gates:[[-33.4245,-70.7200],[-33.4250,-70.7350],[-33.4255,-70.7500],[-33.4260,-70.7650]] },
     ]
   },
   {
