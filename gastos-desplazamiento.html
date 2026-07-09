@@ -398,48 +398,6 @@ function setupAutocomplete(input) {
   input.addEventListener('input', () => { input.dataset.lat = ''; input.dataset.lng = ''; });
 }
 
-// ─── GETAPI TOLL CALCULATION (real prices) ─────────────────────────────────
-const GETAPI_KEY = 'd4cafa55-2582-42a8-8b75-72c6b60cbb5d';
-
-async function calcTollsGetAPI(routePath, departureTime, durationSec) {
-  // Sample route points (~75 points max)
-  const step = Math.max(1, Math.floor(routePath.length / 75));
-  const path = [];
-  for (let i = 0; i < routePath.length; i += step) {
-    const t = new Date(departureTime.getTime() + (i / routePath.length) * durationSec * 1000);
-    path.push({
-      lat: parseFloat(routePath[i].lat().toFixed(6)),
-      lng: parseFloat(routePath[i].lng().toFixed(6)),
-      timestamp: t.toISOString()
-    });
-  }
-  // Add last point
-  const last = routePath[routePath.length - 1];
-  path.push({
-    lat: parseFloat(last.lat().toFixed(6)),
-    lng: parseFloat(last.lng().toFixed(6)),
-    timestamp: new Date(departureTime.getTime() + durationSec * 1000).toISOString()
-  });
-
-  const vMult = vehicleMultiplier();
-  const catCode = document.getElementById('vehicle').value === 'motorcycle' ? 'MOTO'
-    : document.getElementById('vehicle').value === 'truck' ? 'CAMION_2_EJES' : 'LIVIANO';
-
-  const resp = await fetch('https://chile.getapi.cl/v1/tollroutes/api/calculate-by-path', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Api-Key': GETAPI_KEY },
-    body: JSON.stringify({ path, categoryCode: catCode })
-  });
-  const data = await resp.json();
-  if (!data.success || !data.data?.details?.length) return [];
-
-  return data.data.details.map(d => ({
-    highway: d.autopista || 'Peaje',
-    section: d.peaje || d.type,
-    price: Math.round(d.costo)
-  }));
-}
-
 // ─── TOLL PERIOD ───────────────────────────────────────────────────────────
 function getTollPeriod(dt) {
   const day = dt.getDay(), t = dt.getHours() + dt.getMinutes() / 60;
@@ -615,20 +573,13 @@ async function calcTramo(idx) {
   const period = getTollPeriod(departure);
   const kmCost = Math.round(distKm * KM_RATE);
 
-  // Get route path points for GetAPI toll calculation
+  // Get route path points for toll gate detection
   const routePath = [];
   result.routes[0].legs[0].steps.forEach(step => {
     step.path.forEach(pt => routePath.push(pt));
   });
 
-  // Calculate tolls via GetAPI (real prices from Chilean toll operators)
-  let tagDetails = [];
-  try {
-    tagDetails = await calcTollsGetAPI(routePath, departure, durSec);
-  } catch(e) {
-    console.warn('GetAPI toll calc failed, using local detection:', e);
-    tagDetails = calcTollsFromRoute(routePath, period);
-  }
+  const tagDetails = calcTollsFromRoute(routePath, period);
   const toll = tagDetails.reduce((sum, t) => sum + t.price, 0);
 
   // Draw route on map
