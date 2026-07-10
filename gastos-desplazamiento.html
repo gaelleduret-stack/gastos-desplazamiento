@@ -153,128 +153,206 @@ const PERIOD_LABEL = { punta:'Hora Punta', valle:'Hora Valle', nocturna:'Nocturn
 const PERIOD_CLASS = { punta:'period-punta', valle:'period-valle', nocturna:'period-nocturna' };
 const fmt = n => '$' + Math.round(n).toLocaleString('es-CL');
 
-// ─── TARIFF DATABASE 2026 ──────────────────────────────────────────────────
-const GATE_RADIUS = 250; // metros — balanced for Google Maps detailed route path
-const TARIFF_VERSION = '2026-06-official';
-// TARIFAS OFICIALES 2026 — Fuentes: autopistacentral.cl, costaneranorte.cl, vespuciosur.cl, concesiones.mop.gob.cl
-// Autopista Central: TBFP $104/km, TBP $208/km, TS $312/km
-// Costanera Norte: TBFP $107/km, TBP $206/km, TS $312/km
-// Valores = tarifa total del tramo (largo × $/km), NO un solo pórtico
+// ─── TARIFF DATABASE 2026 — POR PÓRTICO INDIVIDUAL ─────────────────────────
+const GATE_RADIUS = 120; // metros — pórticos reales georreferenciados (antes 250m para zonas agrupadas)
+const TARIFF_VERSION = '2026-07-portico';
+// Cada pórtico real tiene su propia ubicación (mayormente OpenStreetMap) y tarifa oficial —
+// el cobro depende de qué pórticos cruza la ruta real, no de una "zona" completa.
+// Fuentes: autopistacentral.cl, web.costaneranorte.cl, vespucionorte.cl, vespuciosur.cl,
+// tunelsancristobal.cl, concesiones.mop.gob.cl, rutamaipo.cl, nuevaaconcagua.cl, autopistaloslibertadores.cl.
+// Ninguna autopista urbana publica tarifa "nocturna" distinta: de noche rige la tarifa valle/TBFP
+// (no hay campo nocturna independiente — nocturna = valle en todos los pórticos abajo).
+// No se modela la tarifa de "saturación" (TS/súper punta) por falta de horario exacto publicado —
+// se usa punta (TBP) como techo.
+// Ruta 78 (Autopista del Sol) y Autopista Nororiente quedaron FUERA: no se encontraron coordenadas
+// reales para ninguno de sus pórticos (ni fuentes oficiales ni OpenStreetMap) — mejor no cobrar que inventar ubicación.
+
+const PERIOD_STANDARD = 'standard'; // L-V 7:00-9:00 y 17:30-20:00 = punta, resto = valle
+const PERIOD_68 = 'weekend68';      // Ruta 68: punta = viernes 17:00 a domingo 24:00 (fin de semana/feriados)
+const PERIOD_AVO = 'avo';           // AVO: L-V 7:30-9:30 y 17:30-19:30 = punta
+
+function computePeriod(periodType, dt) {
+  const day = dt.getDay(), t = dt.getHours() + dt.getMinutes() / 60;
+  if (periodType === PERIOD_68) {
+    if (day === 5 && t >= 17) return 'punta';
+    if (day === 6 || day === 0) return 'punta';
+    return 'valle';
+  }
+  if (periodType === PERIOD_AVO) {
+    if (day >= 1 && day <= 5 && ((t >= 7.5 && t < 9.5) || (t >= 17.5 && t < 19.5))) return 'punta';
+    return 'valle';
+  }
+  if (day >= 1 && day <= 5 && ((t >= 7 && t < 9) || (t >= 17.5 && t < 20))) return 'punta';
+  return 'valle';
+}
 
 const DEFAULT_AUTOPISTAS = [
   {
-    id: 'autopista-central', name: 'Autopista Central (Ruta 5)', type: 'urbana',
-    // $104/km TBFP, $208/km TBP, $312/km TS — gates strictly on Ruta 5 highway
-    // minGates:3 to avoid false positives from routes ending near Ruta 5
+    id: 'autopista-central', name: 'Autopista Central (Ruta 5)', type: 'urbana', periodType: PERIOD_STANDARD,
+    // autopistacentral.cl, vigencia 17.03–31.12.2026. PA1 sin coordenadas confirmadas (excluido).
     sections: [
-      { id:'ac-norte', name:'Tramo Norte (Río Mapocho–Ruta 5 Norte ~5km)', punta:1040, valle:520, nocturna:312, minGates:3,
-        gates:[[-33.3600,-70.6530],[-33.3700,-70.6535],[-33.3800,-70.6540],[-33.3900,-70.6545],[-33.3980,-70.6548]] },
-      { id:'ac-centro', name:'Tramo Centro (Alameda–Río Mapocho ~4km)', punta:832, valle:416, nocturna:312, minGates:3,
-        gates:[[-33.4050,-70.6550],[-33.4150,-70.6548],[-33.4250,-70.6546],[-33.4350,-70.6545],[-33.4440,-70.6545]] },
-      { id:'ac-sur', name:'Tramo Sur (Ruta 5 Sur–Alameda ~5km)', punta:1040, valle:520, nocturna:312, minGates:3,
-        gates:[[-33.4530,-70.6550],[-33.4630,-70.6565],[-33.4730,-70.6590],[-33.4830,-70.6620],[-33.4930,-70.6655]] },
+      { id:'pa2', name:'PA2 Los Guindos–La Capilla', punta:1737, valle:868, nocturna:868, minGates:1, gates:[[-33.6473389,-70.7116107]] },
+      { id:'pa3', name:'PA3 La Capilla–Colón', punta:1170, valle:585, nocturna:585, minGates:1, gates:[[-33.6227591,-70.7145696]] },
+      { id:'pa4', name:'PA4 Calera de Tango–La Capilla', punta:260, valle:130, nocturna:130, minGates:1, gates:[[-33.6219812,-70.7148676]] },
+      { id:'pa5', name:'PA5 Colón–Las Acacias', punta:669, valle:335, nocturna:335, minGates:1, gates:[[-33.5827543,-70.7138422]] },
+      { id:'pa6', name:'PA6 Lo Blanco–Colón', punta:316, valle:158, nocturna:158, minGates:1, gates:[[-33.5824122,-70.7139749]] },
+      { id:'pa7', name:'PA7 Las Acacias–Américo Vespucio', punta:904, valle:452, nocturna:452, minGates:1, gates:[[-33.5478986,-70.6970069]] },
+      { id:'pa8', name:'PA8 Américo Vespucio–Las Acacias', punta:904, valle:452, nocturna:452, minGates:1, gates:[[-33.5476268,-70.6968390]] },
+      { id:'pa9', name:'PA9 Departamental–Américo Vespucio', punta:786, valle:393, nocturna:393, minGates:1, gates:[[-33.5071477,-70.6694242]] },
+      { id:'pa10', name:'PA10 Departamental–Carlos Valdovinos', punta:572, valle:286, nocturna:286, minGates:1, gates:[[-33.4957722,-70.6638989]] },
+      { id:'pa11', name:'PA11 Carlos Valdovinos–Departamental', punta:572, valle:286, nocturna:286, minGates:1, gates:[[-33.4953488,-70.6638932]] },
+      { id:'pa12', name:'PA12 Alameda–Carlos Valdovinos', punta:738, valle:369, nocturna:369, minGates:1, gates:[[-33.4688480,-70.6565584]] },
+      { id:'pa13', name:'PA13 Alameda–Río Mapocho', punta:364, valle:182, nocturna:182, minGates:1, gates:[[-33.4489228,-70.6595919]] },
+      { id:'pa14', name:'PA14 Río Mapocho–Alameda', punta:364, valle:182, nocturna:182, minGates:1, gates:[[-33.4483818,-70.6600861]] },
+      { id:'pa15', name:'PA15 14 de la Fama–Río Mapocho', punta:850, valle:425, nocturna:425, minGates:1, gates:[[-33.4265149,-70.6688947]] },
+      { id:'pa16', name:'PA16 Río Mapocho–14 de la Fama', punta:850, valle:425, nocturna:425, minGates:1, gates:[[-33.4171865,-70.6787232]] },
+      { id:'pa17', name:'PA17 14 de la Fama–A. Vespucio Norte', punta:925, valle:462, nocturna:462, minGates:1, gates:[[-33.3685816,-70.6991042]] },
+      { id:'pa18', name:'PA18 A. Vespucio Norte–14 de la Fama', punta:925, valle:462, nocturna:462, minGates:1, gates:[[-33.3682982,-70.6994258]] },
+      { id:'pa30', name:'PA30 Américo Vespucio–Departamental', punta:786, valle:393, nocturna:393, minGates:1, gates:[[-33.5072881,-70.6693191]] },
+      { id:'pa31', name:'PA31 Carlos Valdovinos–Alameda', punta:738, valle:369, nocturna:369, minGates:1, gates:[[-33.4690110,-70.6562428]] },
+      { id:'pa32', name:'PA32 Las Acacias–Lo Blanco', punta:353, valle:177, nocturna:177, minGates:1, gates:[[-33.5588804,-70.7105862]] },
+      { id:'pa37', name:'PA37 Colón–Calera de Tango', punta:910, valle:455, nocturna:455, minGates:1, gates:[[-33.5968940,-70.7157922]] },
+      { id:'pa19', name:'PA19 Ruta 5 Sur–Américo Vespucio (Gral. Velásquez)', punta:619, valle:413, nocturna:413, minGates:1, gates:[[-33.5514043,-70.7090613]] },
+      { id:'pa20', name:'PA20 Américo Vespucio–Ruta 5 Sur (Gral. Velásquez)', punta:619, valle:413, nocturna:413, minGates:1, gates:[[-33.5364729,-70.7076591]] },
+      { id:'pa21', name:'PA21 Américo Vespucio–Carlos Valdovinos (Gral. Velásquez)', punta:769, valle:512, nocturna:512, minGates:1, gates:[[-33.5064259,-70.6972510]] },
+      { id:'pa22', name:'PA22 Carlos Valdovinos–Américo Vespucio (Gral. Velásquez)', punta:769, valle:512, nocturna:512, minGates:1, gates:[[-33.5056315,-70.6970203]] },
+      { id:'pa23', name:'PA23 Carlos Valdovinos–Alameda (Gral. Velásquez)', punta:576, valle:288, nocturna:288, minGates:1, gates:[[-33.4690606,-70.6881273]] },
+      { id:'pa24', name:'PA24 Alameda–Carlos Valdovinos (Gral. Velásquez)', punta:576, valle:288, nocturna:288, minGates:1, gates:[[-33.4698378,-70.6882455]] },
+      { id:'pa25', name:'PA25 Alameda–Río Mapocho (Gral. Velásquez)', punta:844, valle:422, nocturna:422, minGates:1, gates:[[-33.4467397,-70.6920804]] },
+      { id:'pa26', name:'PA26 Río Mapocho–Alameda (Gral. Velásquez)', punta:844, valle:422, nocturna:422, minGates:1, gates:[[-33.4474517,-70.6922865]] },
+      { id:'pa28', name:'PA28 Río Mapocho–Ruta 5 Norte (Gral. Velásquez)', punta:1025, valle:512, nocturna:512, minGates:1, gates:[[-33.3822386,-70.6955624]] },
+      { id:'pa29', name:'PA29 Ruta 5 Norte–Río Mapocho (Gral. Velásquez)', punta:1025, valle:512, nocturna:512, minGates:1, gates:[[-33.3819384,-70.6954739]] },
     ]
   },
   {
-    id: 'costanera-norte', name: 'Costanera Norte', type: 'urbana',
-    // Tarifas oficiales costaneranorte.cl — secciones simplificadas para detección precisa
-    // Oriente = desde Kennedy hasta Vivaceta (P0+P1+P2+P3 combinados, usando tarifa P3 como representativa)
-    // Poniente = desde Vivaceta hasta Ruta 68 (P5+P6+P9)
+    id: 'costanera-norte', name: 'Costanera Norte', type: 'urbana', periodType: PERIOD_STANDARD,
+    // web.costaneranorte.cl, vigencia 2026. P0, P1, EP, P4 sin coordenadas confirmadas (excluidos).
     sections: [
-      { id:'cn-oriente', name:'Costanera Norte Oriente (Kennedy–Vivaceta)', punta:1384, valle:719, nocturna:719, minGates:2,
-        gates:[[-33.4078,-70.5850],[-33.4080,-70.5940],[-33.4085,-70.6010],[-33.4090,-70.6050],[-33.4095,-70.6065],[-33.4130,-70.6073],[-33.4162,-70.6082],[-33.4195,-70.6120],[-33.4220,-70.6175]] },
-      { id:'cn-poniente', name:'Costanera Norte Poniente (Vivaceta–Ruta 68)', punta:2408, valle:1251, nocturna:1251, minGates:2,
-        gates:[[-33.4225,-70.6650],[-33.4230,-70.6800],[-33.4240,-70.6950],[-33.4250,-70.7200],[-33.4255,-70.7450]] },
+      { id:'cn-p21', name:'P2.1 Gran Vía–Centenario', punta:820, valle:426, nocturna:426, minGates:1, gates:[[-33.3846042,-70.5926964]] },
+      { id:'cn-p22', name:'P2.2 Centenario–Puente Lo Saldes', punta:509, valle:264, nocturna:264, minGates:1, gates:[[-33.3944443,-70.6033861]] },
+      { id:'cn-sb', name:'SB Salida Bellavista', punta:450, valle:234, nocturna:234, minGates:1, gates:[[-33.4221473,-70.6198252]] },
+      { id:'cn-p3', name:'P3 Puente Lo Saldes–Vivaceta', punta:1385, valle:719, nocturna:719, minGates:1, gates:[[-33.4239919,-70.6219547]] },
+      { id:'cn-ev', name:'EV Entrada Vivaceta', punta:230, valle:119, nocturna:119, minGates:1, gates:[[-33.4302801,-70.6572269]] },
+      { id:'cn-p5', name:'P5 Vivaceta–Carrascal', punta:1378, valle:716, nocturna:716, minGates:1, gates:[[-33.4264381,-70.6698330]] },
+      { id:'cn-p61', name:'P6.1 Carrascal–Petersen', punta:461, valle:240, nocturna:240, minGates:1, gates:[[-33.4117097,-70.7395811]] },
+      { id:'cn-p62', name:'P6.2 Petersen–Américo Vespucio Poniente', punta:702, valle:365, nocturna:365, minGates:1, gates:[[-33.4129722,-70.7664565]] },
+      { id:'cn-p9', name:'P9 Américo Vespucio Poniente–Ruta 68', punta:1030, valle:535, nocturna:535, minGates:1, gates:[[-33.4178581,-70.7908552]] },
+      { id:'cn-p7', name:'P7 Estoril–Las Tranqueras (Eje Kennedy)', punta:482, valle:250, nocturna:250, minGates:1, gates:[[-33.3876805,-70.5429258]] },
+      { id:'cn-p8', name:'P8 Las Tranqueras–Costanera Norte (Eje Kennedy)', punta:1124, valle:584, nocturna:584, minGates:1, gates:[[-33.4080729,-70.5997640]] },
     ]
   },
   {
-    id: 'vespucio-norte', name: 'Vespucio Norte Express', type: 'urbana',
-    // Estimación basada en $/km similar a Autopista Central (~$100-200/km)
+    id: 'vespucio-norte', name: 'Vespucio Norte Express', type: 'urbana', periodType: PERIOD_STANDARD,
+    // vespucionorte.cl / MOP, vigencia 2026. El Salto (Ruta 5 Norte) ↔ Ruta 78.
     sections: [
-      { id:'vn-oriente', name:'Sector Oriente (El Salto–Independencia ~4km)', punta:820, valle:410, nocturna:250, minGates:2,
-        gates:[[-33.3810,-70.6100],[-33.3800,-70.6220],[-33.3790,-70.6350]] },
-      { id:'vn-centro', name:'Sector Central (Independencia–Ruta 5 ~3km)', punta:624, valle:312, nocturna:190, minGates:2,
-        gates:[[-33.3790,-70.6440],[-33.3785,-70.6530],[-33.3780,-70.6620]] },
-      { id:'vn-poniente', name:'Sector Poniente (Ruta 5–Quilicura ~5km)', punta:1040, valle:520, nocturna:312, minGates:2,
-        gates:[[-33.3760,-70.6740],[-33.3730,-70.6880],[-33.3700,-70.7030]] },
+      { id:'vn-p15', name:'P15 El Salto–Recoleta', punta:281, valle:141, nocturna:141, minGates:1, gates:[[-33.3886636,-70.6329673]] },
+      { id:'vn-p13', name:'P13 Recoleta–Pedro Fontova', punta:824, valle:412, nocturna:412, minGates:1, gates:[[-33.3733644,-70.6646148]] },
+      { id:'vn-p11', name:'P11 Pedro Fontova–Ruta 5 Norte', punta:603, valle:301, nocturna:301, minGates:1, gates:[[-33.3658211,-70.6951137]] },
+      { id:'vn-p8', name:'P8 Ruta 5 Norte–Condell', punta:1306, valle:653, nocturna:653, minGates:1, gates:[[-33.3730357,-70.7113029]] },
+      { id:'vn-p6', name:'P6 Condell–Costanera Norte', punta:904, valle:452, nocturna:452, minGates:1, gates:[[-33.3993533,-70.7755638]] },
+      { id:'vn-p4', name:'P4 Costanera Norte–Ruta 68', punta:703, valle:352, nocturna:352, minGates:1, gates:[[-33.4312884,-70.7848507]] },
+      { id:'vn-p2', name:'P2 Ruta 68–Los Mares', punta:422, valle:211, nocturna:211, minGates:1, gates:[[-33.4563798,-70.7671522]] },
+      { id:'vn-p17', name:'P17 Los Mares–Ruta 78', punta:784, valle:392, nocturna:392, minGates:1, gates:[[-33.4828675,-70.7535733]] },
+      { id:'vn-p1', name:'P1 Ruta 78–Santa Elena', punta:241, valle:121, nocturna:121, minGates:1, gates:[[-33.4833590,-70.7530939]] },
+      { id:'vn-p16', name:'P16 Santa Elena–Ruta 68', punta:965, valle:482, nocturna:482, minGates:1, gates:[[-33.4512133,-70.7729850]] },
+      { id:'vn-p3', name:'P3 Ruta 68–Costanera Norte', punta:703, valle:352, nocturna:352, minGates:1, gates:[[-33.4387137,-70.7831378]] },
+      { id:'vn-p5', name:'P5 Costanera Norte–Condell', punta:904, valle:452, nocturna:452, minGates:1, gates:[[-33.3996244,-70.7756381]] },
+      { id:'vn-p7', name:'P7 Condell–Lo Echevers', punta:209, valle:105, nocturna:105, minGates:1, gates:[[-33.3813200,-70.7539367]] },
+      { id:'vn-p9', name:'P9 Lo Echevers–Ruta 5 Norte', punta:1097, valle:549, nocturna:549, minGates:1, gates:[[-33.3688771,-70.7043428]] },
+      { id:'vn-p10', name:'P10 Ruta 5 Norte–Pedro Fontova', punta:603, valle:301, nocturna:301, minGates:1, gates:[[-33.3659479,-70.6969041]] },
+      { id:'vn-p12', name:'P12 Pedro Fontova–Guanaco', punta:139, valle:69, nocturna:69, minGates:1, gates:[[-33.3733937,-70.6649728]] },
+      { id:'vn-p14', name:'P14 Guanaco–El Salto', punta:967, valle:483, nocturna:483, minGates:1, gates:[[-33.3886039,-70.6333164]] },
     ]
   },
   {
-    id: 'vespucio-sur', name: 'Vespucio Sur', type: 'urbana',
-    // Tarifas oficiales vespuciosur.cl — sumando pórticos por sector
+    id: 'vespucio-sur', name: 'Vespucio Sur', type: 'urbana', periodType: PERIOD_STANDARD,
+    // vespuciosur.cl, vigencia 2026. Ruta 78 (San Bernardo) ↔ Av. Grecia (Peñalolén).
     sections: [
-      { id:'vs-oriente', name:'Sector Oriente (Grecia–Las Torres)', punta:1347, valle:673, nocturna:400, minGates:2,
-        gates:[[-33.5080,-70.5910],[-33.5160,-70.5960],[-33.5240,-70.6020]] },
-      { id:'vs-centro', name:'Sector Central (Gran Avenida–Ruta 5)', punta:1186, valle:593, nocturna:350, minGates:2,
-        gates:[[-33.5270,-70.6250],[-33.5230,-70.6400],[-33.5180,-70.6550]] },
-      { id:'vs-poniente', name:'Sector Poniente (Ruta 5–Ruta 78)', punta:1568, valle:784, nocturna:470, minGates:2,
-        gates:[[-33.5080,-70.6700],[-33.5000,-70.6830],[-33.4920,-70.6960]] },
+      { id:'vs-p13', name:'P1.3 2ª Transversal–Camino a Melipilla', punta:1065, valle:533, nocturna:533, minGates:1, gates:[[-33.5058611,-70.728455]] },
+      { id:'vs-p22', name:'P2.2 Gral. Velásquez–Ruta 5', punta:502, valle:251, nocturna:251, minGates:1, gates:[[-33.526262,-70.6941029]] },
+      { id:'vs-p34', name:'P3.4 Ruta 5–Gran Avenida', punta:241, valle:121, nocturna:121, minGates:1, gates:[[-33.5338163,-70.6764509]] },
+      { id:'vs-p32', name:'P3.2 Gran Avenida–Santa Rosa', punta:945, valle:472, nocturna:472, minGates:1, gates:[[-33.5398418,-70.6529975]] },
+      { id:'vs-p43', name:'P4.3 Coronel–Santa Julia', punta:90, valle:45, nocturna:45, minGates:1, gates:[[-33.5411533,-70.6150198]] },
+      { id:'vs-p42', name:'P4.2 Gnmo. de Alderete–Vicuña Mackenna', punta:533, valle:266, nocturna:266, minGates:1, gates:[[-33.5268018,-70.6025742]] },
+      { id:'vs-p54', name:'P5.4 Las Torres–Quilín', punta:766, valle:383, nocturna:383, minGates:1, gates:[[-33.4960669,-70.5845023]] },
+      { id:'vs-p52', name:'P5.2 Quilín–Grecia', punta:581, valle:290, nocturna:290, minGates:1, gates:[[-33.4810039,-70.5787734]] },
+      { id:'vs-p51', name:'P5.1 Grecia–Quilín', punta:243, valle:122, nocturna:122, minGates:1, gates:[[-33.4809446,-70.5790434]] },
+      { id:'vs-p53', name:'P5.3 Quilín–Las Torres', punta:1103, valle:552, nocturna:552, minGates:1, gates:[[-33.4955584,-70.5844562]] },
+      { id:'vs-p41', name:'P4.1 Gnmo. de Alderete–Santa Julia', punta:623, valle:312, nocturna:312, minGates:1, gates:[[-33.5297901,-70.6048452]] },
+      { id:'vs-p31', name:'P3.1 Santa Rosa–Gran Avenida', punta:665, valle:333, nocturna:333, minGates:1, gates:[[-33.539608,-70.6529431]] },
+      { id:'vs-p33', name:'P3.3 Gran Avenida–Ruta 5', punta:521, valle:260, nocturna:260, minGates:1, gates:[[-33.5335852,-70.6763449]] },
+      { id:'vs-p21', name:'P2.1 Ruta 5–General Velásquez', punta:502, valle:251, nocturna:251, minGates:1, gates:[[-33.5260519,-70.6940167]] },
+      { id:'vs-p11', name:'P1.1 General Velásquez–Ruta 78', punta:1065, valle:533, nocturna:533, minGates:1, gates:[[-33.5165613,-70.7125335]] },
     ]
   },
   {
-    id: 'americo-vespucio-oriente', name: 'Américo Vespucio Oriente (AVO)', type: 'urbana',
+    id: 'tunel-san-cristobal', name: 'Túnel San Cristóbal', type: 'urbana', periodType: PERIOD_STANDARD,
+    // MOP oficial 2026. El Salto ↔ Kennedy/Lo Saldes.
     sections: [
-      { id:'avo-norte', name:'Tramo Norte (El Salto–Príncipe de Gales ~3km)', punta:750, valle:375, nocturna:225, minGates:2,
-        gates:[[-33.3950,-70.5870],[-33.4030,-70.5855],[-33.4120,-70.5845]] },
-      { id:'avo-sur', name:'Tramo Sur (Príncipe de Gales–Grecia ~3km)', punta:650, valle:325, nocturna:195, minGates:2,
-        gates:[[-33.4250,-70.5835],[-33.4350,-70.5830],[-33.4450,-70.5840]] },
+      { id:'tsc-sur', name:'El Salto–Kennedy', punta:904, valle:565, nocturna:565, minGates:1, gates:[[-33.3986159,-70.6157247]] },
+      { id:'tsc-nor', name:'Kennedy–El Salto', punta:678, valle:452, nocturna:452, minGates:1, gates:[[-33.3988003,-70.6151323]] },
     ]
   },
   {
-    id: 'tunel-san-cristobal', name: 'Túnel San Cristóbal', type: 'urbana',
+    id: 'ruta-68', name: 'Ruta 68 (Santiago–Valparaíso)', type: 'interurbana', periodType: PERIOD_68,
+    // Rutas del Pacífico / MOP, vigencia 2026. Punta = viernes 17:00 a domingo 24:00 (no es hora punta diaria).
+    // Laterales (Curacaví, Casablanca, etc.) sin datos por pórtico — excluidos.
     sections: [
-      { id:'tsc-paso', name:'Paso por túnel', punta:1700, valle:1100, nocturna:600, minGates:2,
-        gates:[[-33.4175,-70.6350],[-33.4155,-70.6340],[-33.4135,-70.6330]] },
+      { id:'r68-loprado', name:'Peaje Troncal Lo Prado (km 17.9)', punta:4000, valle:2700, nocturna:2700, minGates:1, gates:[[-33.456415,-70.8986965]] },
+      { id:'r68-zapata', name:'Peaje Zapata (Túnel Zapata, km 53.9)', punta:4000, valle:2700, nocturna:2700, minGates:1, gates:[[-33.3715517,-71.3000625]] },
+      { id:'r68-troncalsur', name:'Peaje Troncal Sur', punta:1100, valle:1100, nocturna:1100, minGates:1, gates:[[-33.0629256,-71.4340409]] },
     ]
   },
   {
-    id: 'ruta-68', name: 'Ruta 68 (Santiago–Valparaíso)', type: 'interurbana',
+    id: 'ruta-5-sur', name: 'Ruta 5 Sur (Ruta del Maipo)', type: 'interurbana', periodType: PERIOD_STANDARD,
+    // rutamaipo.cl, vigencia 2026. Tarifa plana, sin variación por horario.
+    // Solo Angostura tiene coordenadas confirmadas — el resto (Gabriela, Tocornal, Río Maipo,
+    // Quinta y 35 plazas laterales) no tiene coordenadas reales disponibles y quedó excluido.
     sections: [
-      { id:'r68-zapata', name:'Peaje Zapata', punta:4200, valle:2800, nocturna:2800, minGates:1,
-        gates:[[-33.3850,-70.9380],[-33.3830,-70.9420]] },
+      { id:'r5s-angostura', name:'Troncal Angostura (km 54-57)', punta:3800, valle:3800, nocturna:3800, minGates:1, gates:[[-33.9078062,-70.7314403],[-33.9074017,-70.7309078]] },
     ]
   },
   {
-    id: 'ruta-78', name: 'Ruta 78 – Autopista del Sol', type: 'interurbana',
+    id: 'ruta-5-norte', name: 'Ruta 5 Norte (Autopista Nueva Aconcagua)', type: 'interurbana', periodType: PERIOD_STANDARD,
+    // nuevaaconcagua.cl, vigencia 2026. Troncales: tarifa plana. Las Vegas/Pichidangui y los
+    // 4 pórticos urbanos (Lo Marcoleta, Buenaventura, La Montaña, Lo Pinto) sin coordenadas — excluidos.
     sections: [
-      { id:'r78-av', name:'Plaza Américo Vespucio', punta:1100, valle:733, nocturna:733, minGates:1,
-        gates:[[-33.4920,-70.7250],[-33.4940,-70.7270]] },
-      { id:'r78-malloco', name:'Plaza Malloco', punta:350, valle:233, nocturna:233, minGates:1,
-        gates:[[-33.5280,-70.8480],[-33.5300,-70.8510]] },
-      { id:'r78-talagante', name:'Plaza Talagante', punta:580, valle:387, nocturna:387, minGates:1,
-        gates:[[-33.6550,-71.1750],[-33.6570,-71.1780]] },
+      { id:'r5n-lampa', name:'Peaje Lampa', punta:900, valle:900, nocturna:900, minGates:1, gates:[[-33.2357344,-70.7592174]] },
+      { id:'r5n-elmelon', name:'Túnel El Melón', punta:2900, valle:2900, nocturna:2900, minGates:1, gates:[[-32.6296534,-71.2305687]] },
     ]
   },
   {
-    id: 'ruta-5-sur', name: 'Ruta 5 Sur', type: 'interurbana',
+    id: 'ruta-57', name: 'Ruta 57 – Los Libertadores', type: 'interurbana', periodType: PERIOD_STANDARD,
+    // autopistaloslibertadores.cl / MOP, vigencia feb-2026. Tarifa plana. San Luis–Chicureo sin coordenadas — excluido.
     sections: [
-      { id:'r5s-accesosur', name:'Acceso Sur (troncal)', punta:1450, valle:1450, nocturna:1450, minGates:1,
-        gates:[[-33.5780,-70.6520],[-33.5810,-70.6530]] },
-      { id:'r5s-angostura', name:'Plaza Angostura', punta:3930, valle:3930, nocturna:3930, minGates:1,
-        gates:[[-33.8480,-70.7180],[-33.8510,-70.7200]] },
+      { id:'r57-chacabuco', name:'Peaje Chacabuco (Túnel Chacabuco, km 49)', punta:3300, valle:3300, nocturna:3300, minGates:1, gates:[[-33.0007885,-70.6872448]] },
+      { id:'r57-canteras', name:'Las Canteras–San José (lateral)', punta:1400, valle:1400, nocturna:1400, minGates:1, gates:[[-33.3108701,-70.7021396],[-33.2700796,-70.7354601]] },
     ]
   },
   {
-    id: 'ruta-5-norte', name: 'Ruta 5 Norte', type: 'interurbana',
-    sections: [
-      { id:'r5n-lampa', name:'Plaza Lampa', punta:2993, valle:2993, nocturna:2993, minGates:1,
-        gates:[[-33.2680,-70.8680],[-33.2710,-70.8710]] },
-    ]
-  },
-  {
-    id: 'ruta-57', name: 'Ruta 57 – Los Libertadores', type: 'interurbana',
-    sections: [
-      { id:'r57-colina', name:'Plaza Colina', punta:2352, valle:2352, nocturna:2352, minGates:1,
-        gates:[[-33.1780,-70.6680],[-33.1810,-70.6700]] },
-    ]
-  },
-  {
-    id: 'autopista-nororiente', name: 'Autopista Nororiente', type: 'interurbana',
-    sections: [
-      { id:'nor-oriente', name:'Sector Oriente', punta:6383, valle:4256, nocturna:4256, minGates:1,
-        gates:[[-33.3480,-70.5180],[-33.3510,-70.5210]] },
-      { id:'nor-poniente', name:'Sector Poniente', punta:4256, valle:2837, nocturna:2837, minGates:1,
-        gates:[[-33.3180,-70.5780],[-33.3210,-70.5810]] },
+    id: 'avo', name: 'Américo Vespucio Oriente (AVO)', type: 'urbana', periodType: PERIOD_AVO,
+    // avo.cl, vigencia 2026. Sistema cerrado por distancia real (entrada+salida), NO por cruce de
+    // pórtico individual — a diferencia de las demás autopistas de esta lista. Se aproxima cobrando
+    // la distancia entre los dos pórticos conocidos más alejados que la ruta cruce, por la tarifa
+    // $/km implícita en la tabla oficial ($232/km valle, $464/km punta, consistente en 4 de 5 muestras).
+    // Coordenadas de confianza media (match por nombre en OSM, sin confirmar por operador); ~10 de 21
+    // pórticos reales de AVO no tienen coordenadas y no están incluidos, así que el tramo detectado
+    // puede quedar corto si la ruta entra/sale por uno de esos pórticos sin geolocalizar.
+    pricingModel: 'od-distance',
+    rateKm: { punta: 464, valle: 232, nocturna: 232 },
+    sections: [],
+    odGates: [
+      { id:'p101', name:'P101 Bilbao', lat:-33.4301386, lng:-70.5747034 },
+      { id:'p103', name:'P103 Los Militares', lat:-33.4124572, lng:-70.5820353 },
+      { id:'p104', name:'P104 Presidente Riesco', lat:-33.4094018, lng:-70.5869709 },
+      { id:'p108', name:'P108 Costanera Norte–Nororiente', lat:-33.3966044, lng:-70.5887555 },
+      { id:'p201', name:'P201 C. Empresarial–El Salto', lat:-33.3964481, lng:-70.6198001 },
+      { id:'p203', name:'P203 Costanera Norte Oriente', lat:-33.3961477, lng:-70.6041337 },
+      { id:'p205', name:'P205 Vitacura', lat:-33.4002342, lng:-70.5875491 },
+      { id:'p209', name:'P209 Cristóbal Colón', lat:-33.4244301, lng:-70.5784158 },
+      { id:'p210', name:'P210 Isabel la Católica', lat:-33.4259696, lng:-70.5756851 },
+      { id:'p211', name:'P211 Tobalaba', lat:-33.4325433, lng:-70.5744918 },
+      { id:'p212', name:'P212 Costanera Sur', lat:-33.3916344, lng:-70.5970934 },
     ]
   },
 ];
@@ -411,8 +489,8 @@ function vehicleMultiplier() {
 }
 function getSectionPrice(section, period) { return section[period] || section.valle || 0; }
 
-// ─── AUTO TOLL DETECTION ───────────────────────────────────────────────────
-function calcTollsFromRoute(routePath, period) {
+// ─── AUTO TOLL DETECTION (por pórtico individual) ──────────────────────────
+function calcTollsFromRoute(routePath, departure) {
   const vMult = vehicleMultiplier();
   const detected = [];
 
@@ -429,16 +507,35 @@ function calcTollsFromRoute(routePath, period) {
     sampled.push({ lat: last.lat(), lng: last.lng() });
   }
 
+  const gateHit = (lat, lng) => sampled.some(pt => haversineMeters(lat, lng, pt.lat, pt.lng) < GATE_RADIUS);
+
   AUTOPISTAS.forEach(ap => {
+    const period = computePeriod(ap.periodType, departure);
+
+    if (ap.pricingModel === 'od-distance') {
+      // AVO: sistema por distancia real entre entrada y salida, no por cruce individual.
+      const hits = (ap.odGates || []).filter(g => gateHit(g.lat, g.lng));
+      if (hits.length >= 2) {
+        let maxKm = 0;
+        for (let i = 0; i < hits.length; i++) {
+          for (let j = i + 1; j < hits.length; j++) {
+            const km = haversineMeters(hits[i].lat, hits[i].lng, hits[j].lat, hits[j].lng) / 1000;
+            if (km > maxKm) maxKm = km;
+          }
+        }
+        const rate = ap.rateKm[period] || ap.rateKm.valle;
+        detected.push({
+          highway: ap.name, section: `${ap.name} (estimado por distancia, ${maxKm.toFixed(1)} km)`,
+          price: Math.round(maxKm * rate * vMult)
+        });
+      }
+      return;
+    }
+
     ap.sections.forEach(sec => {
       const gates = sec.gates || [];
-      const minRequired = sec.minGates || 2;
-      let gatesHit = 0;
-      for (const gate of gates) {
-        for (const pt of sampled) {
-          if (haversineMeters(gate[0], gate[1], pt.lat, pt.lng) < GATE_RADIUS) { gatesHit++; break; }
-        }
-      }
+      const minRequired = sec.minGates || 1;
+      const gatesHit = gates.filter(g => gateHit(g[0], g[1])).length;
       if (gatesHit >= minRequired) {
         detected.push({
           highway: ap.name, section: sec.name,
@@ -579,7 +676,7 @@ async function calcTramo(idx) {
     step.path.forEach(pt => routePath.push(pt));
   });
 
-  const tagDetails = calcTollsFromRoute(routePath, period);
+  const tagDetails = calcTollsFromRoute(routePath, departure);
   const toll = tagDetails.reduce((sum, t) => sum + t.price, 0);
 
   // Draw route on map
