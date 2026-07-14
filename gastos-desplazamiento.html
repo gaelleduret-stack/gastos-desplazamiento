@@ -155,7 +155,7 @@ const fmt = n => '$' + Math.round(n).toLocaleString('es-CL');
 
 // ─── TARIFF DATABASE 2026 — POR PÓRTICO INDIVIDUAL ─────────────────────────
 const GATE_RADIUS = 120; // metros — pórticos reales georreferenciados (antes 250m para zonas agrupadas)
-const TARIFF_VERSION = '2026-07-portico';
+const TARIFF_VERSION = '2026-07-portico-v2';
 // Cada pórtico real tiene su propia ubicación (mayormente OpenStreetMap) y tarifa oficial —
 // el cobro depende de qué pórticos cruza la ruta real, no de una "zona" completa.
 // Fuentes: autopistacentral.cl, web.costaneranorte.cl, vespucionorte.cl, vespuciosur.cl,
@@ -227,6 +227,10 @@ const DEFAULT_AUTOPISTAS = [
   {
     id: 'costanera-norte', name: 'Costanera Norte', type: 'urbana', periodType: PERIOD_STANDARD,
     // web.costaneranorte.cl, vigencia 2026. P0, P1, EP, P4 sin coordenadas confirmadas (excluidos).
+    // Eje Kennedy (P7, P8) EXCLUIDO: corre por la mediana de Av. Presidente Kennedy junto a las pistas
+    // locales gratuitas, así que un viaje corto entre puntos de esa misma avenida (ej. entre malls de
+    // Las Condes/Vitacura) pasa a metros del pórtico sin haber usado la pista pagada — no se puede
+    // distinguir por proximidad GPS. Confirmado 2026-07-14: cobro falso en un viaje real reportado.
     sections: [
       { id:'cn-p21', name:'P2.1 Gran Vía–Centenario', punta:820, valle:426, nocturna:426, minGates:1, gates:[[-33.3846042,-70.5926964]] },
       { id:'cn-p22', name:'P2.2 Centenario–Puente Lo Saldes', punta:509, valle:264, nocturna:264, minGates:1, gates:[[-33.3944443,-70.6033861]] },
@@ -237,8 +241,6 @@ const DEFAULT_AUTOPISTAS = [
       { id:'cn-p61', name:'P6.1 Carrascal–Petersen', punta:461, valle:240, nocturna:240, minGates:1, gates:[[-33.4117097,-70.7395811]] },
       { id:'cn-p62', name:'P6.2 Petersen–Américo Vespucio Poniente', punta:702, valle:365, nocturna:365, minGates:1, gates:[[-33.4129722,-70.7664565]] },
       { id:'cn-p9', name:'P9 Américo Vespucio Poniente–Ruta 68', punta:1030, valle:535, nocturna:535, minGates:1, gates:[[-33.4178581,-70.7908552]] },
-      { id:'cn-p7', name:'P7 Estoril–Las Tranqueras (Eje Kennedy)', punta:482, valle:250, nocturna:250, minGates:1, gates:[[-33.3876805,-70.5429258]] },
-      { id:'cn-p8', name:'P8 Las Tranqueras–Costanera Norte (Eje Kennedy)', punta:1124, valle:584, nocturna:584, minGates:1, gates:[[-33.4080729,-70.5997640]] },
     ]
   },
   {
